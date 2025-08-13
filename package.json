@@ -1,0 +1,12 @@
+{
+  "name": "buero-dashboard-google-sheets",
+  "version": "1.0.0",
+  "description": "Büroartikel-Dashboard mit Google Sheets als Backend.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "google-spreadsheet": "^4.1.1"
+  }
+}
