@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Büroartikel-Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .modal, .accordion-content {
+            transition: all 0.3s ease-in-out;
+        }
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+        }
+        .accordion-content.open {
+            max-height: 1000vh; /* Grosser Wert, um Inhalt jeder Grösse zu erlauben */
+        }
+        .low-stock-indicator {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app" class="container mx-auto p-4 md:p-8">
+
+        <!-- Header und Benutzer-Umschalter -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-4 rounded-lg shadow-md">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Büroartikel-Dashboard</h1>
+                <p id="user-id-display" class="text-sm text-gray-500 mt-1">Lade Benutzerinformationen...</p>
+            </div>
+            <div class="flex items-center space-x-4 mt-4 md:mt-0">
+                <span class="font-semibold">Ansicht wechseln:</span>
+                <select id="role-switcher" class="p-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500">
+                    <option value="colleague">Kollegen-Ansicht</option>
+                    <option value="admin">Admin-Ansicht</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Hauptinhalt -->
+        <div id="content-area">
+            <!-- Admin-Ansicht -->
+            <div id="admin-view" class="hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-2">
+                        <h2 class="text-2xl font-bold mb-4">Lagerbestand verwalten</h2>
+                        <div class="bg-white p-6 rounded-lg shadow-md">
+                            <button id="show-add-item-modal-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300 mb-6 flex items-center justify-center space-x-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                                <span>Neuen Artikel hinzufügen</span>
+                            </button>
+                            <div class="flex items-center border-b-2 border-blue-500 py-2 mb-6">
+                                <input id="search-input-admin" class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none" type="text" placeholder="Artikel oder Kategorie suchen...">
+                            </div>
+                            <div id="inventory-list-admin" class="space-y-2">
+                                <!-- Akkordeon-Kategorien werden hier per JS eingefügt -->
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4">Offene Anfragen</h2>
+                        <div id="request-list-admin" class="bg-white p-6 rounded-lg shadow-md space-y-4">
+                            <!-- Anfragen werden hier per JS eingefügt -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kollegen-Ansicht -->
+            <div id="colleague-view">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-2">
+                         <h2 class="text-2xl font-bold mb-4">Verfügbare Artikel</h2>
+                         <div class="bg-white p-6 rounded-lg shadow-md">
+                             <div class="flex items-center border-b-2 border-blue-500 py-2 mb-6">
+                                <input id="search-input-colleague" class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none" type="text" placeholder="Artikel oder Kategorie suchen...">
+                            </div>
+                            <div id="inventory-list-colleague" class="space-y-2">
+                                <!-- Akkordeon-Kategorien werden hier per JS eingefügt -->
+                            </div>
+                         </div>
+                    </div>
+                    <div>
+                        <h2 class="text-2xl font-bold mb-4">Meine Anfragen</h2>
+                        <div id="request-list-colleague" class="bg-white p-6 rounded-lg shadow-md space-y-4">
+                            <!-- Eigene Anfragen werden hier per JS eingefügt -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Modals (unverändert) -->
+    <div id="add-item-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">...</div>
+    <div id="request-item-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">...</div>
+    <div id="confirmation-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">...</div>
+    
+    <!-- Die Inhalte der Modals sind aus Gründen der Übersichtlichkeit eingeklappt, aber im Code identisch zum vorherigen Stand -->
+    <script>
+        document.getElementById('add-item-modal').innerHTML = `
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
+            <h3 class="text-2xl font-bold mb-6">Neuen Artikel anlegen</h3>
+            <form id="add-item-form">
+                <div class="space-y-4">
+                    <input type="text" id="item-name" placeholder="Artikelname (z.B. Tacker)" class="w-full p-3 border rounded-lg" required>
+                    <input type="text" id="item-number" placeholder="Artikelnummer (z.B. 4711)" class="w-full p-3 border rounded-lg" required>
+                    <input type="text" id="item-category" placeholder="Kategorie (z.B. Bürogeräte)" class="w-full p-3 border rounded-lg" required>
+                    <input type="number" id="item-stock" placeholder="Anfangslagerbestand" class="w-full p-3 border rounded-lg" required min="0">
+                    <input type="url" id="item-image-url" placeholder="Bild-URL (optional)" class="w-full p-3 border rounded-lg">
+                </div>
+                <div class="flex justify-end space-x-4 mt-8">
+                    <button type="button" id="cancel-add-item" class="px-6 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">Abbrechen</button>
+                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Speichern</button>
+                </div>
+            </form>
+        </div>`;
+        document.getElementById('request-item-modal').innerHTML = `
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
+            <h3 class="text-2xl font-bold mb-2">Artikel anfragen</h3>
+            <p id="request-item-name" class="text-lg mb-1"></p>
+            <p id="request-item-stock" class="text-sm text-gray-600 mb-6"></p>
+            <form id="request-item-form">
+                <input type="hidden" id="request-article-id">
+                <div>
+                    <label for="request-quantity" class="block font-medium mb-2">Gewünschte Menge:</label>
+                    <input type="number" id="request-quantity" class="w-full p-3 border rounded-lg" required min="1">
+                </div>
+                <div class="flex justify-end space-x-4 mt-8">
+                    <button type="button" id="cancel-request-item" class="px-6 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">Abbrechen</button>
+                    <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Anfrage senden</button>
+                </div>
+            </form>
+        </div>`;
+        document.getElementById('confirmation-modal').innerHTML = `
+        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md text-center">
+            <h3 id="confirmation-title" class="text-xl font-bold mb-4"></h3>
+            <p id="confirmation-message" class="text-gray-700 mb-8"></p>
+            <div class="flex justify-center space-x-4">
+                <button id="confirm-no" class="px-8 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">Nein</button>
+                <button id="confirm-yes" class="px-8 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Ja</button>
+            </div>
+        </div>`;
+    </script>
+
+
+    <script type="module">
+        // Firebase SDKs importieren
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, doc, collection, onSnapshot, runTransaction, query, 
+            addDoc, serverTimestamp, updateDoc, deleteDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Konfiguration ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO", authDomain: "DEMO", projectId: "DEMO" };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'office-inventory-app';
+
+        // Firebase initialisieren
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let articlesCache = [];
+
+        // --- Authentifizierung ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('user-id-display').textContent = `Angemeldet als: ${user.uid.substring(0, 8)}`;
+                initializeAppLogic();
+            } else {
+                signInAnonymously(auth).catch((error) => console.error("Anonyme Anmeldung fehlgeschlagen:", error));
+            }
+        });
+        
+        // --- Globale Variablen und UI-Elemente ---
+        const roleSwitcher = document.getElementById('role-switcher');
+        const adminView = document.getElementById('admin-view');
+        const colleagueView = document.getElementById('colleague-view');
+        const LOW_STOCK_THRESHOLD = 5;
+
+        // --- Hauptlogik ---
+        function initializeAppLogic() {
+            if (!currentUser) return;
+            setupEventListeners();
+            renderViews();
+            listenToInventory();
+            listenToRequests();
+        }
+
+        // --- Ansichten rendern ---
+        function renderViews() {
+            const currentRole = roleSwitcher.value;
+            adminView.style.display = currentRole === 'admin' ? 'block' : 'none';
+            colleagueView.style.display = currentRole === 'colleague' ? 'block' : 'none';
+            renderInventory(articlesCache); // Neu rendern bei Ansichtswechsel
+        }
+
+        // --- Event Listeners einrichten ---
+        function setupEventListeners() {
+            roleSwitcher.addEventListener('change', renderViews);
+            document.getElementById('show-add-item-modal-btn').addEventListener('click', () => showModal('add-item-modal'));
+            document.getElementById('cancel-add-item').addEventListener('click', () => hideModal('add-item-modal'));
+            document.getElementById('add-item-form').addEventListener('submit', handleAddItem);
+            document.getElementById('cancel-request-item').addEventListener('click', () => hideModal('request-item-modal'));
+            document.getElementById('request-item-form').addEventListener('submit', handleRequestItem);
+            document.getElementById('search-input-admin').addEventListener('input', (e) => filterInventory(e.target.value, 'admin'));
+            document.getElementById('search-input-colleague').addEventListener('input', (e) => filterInventory(e.target.value, 'colleague'));
+        }
+
+        // --- Inventar-Logik ---
+        async function handleAddItem(e) {
+            e.preventDefault();
+            const newItem = {
+                name: document.getElementById('item-name').value,
+                articleNumber: document.getElementById('item-number').value,
+                category: document.getElementById('item-category').value.trim() || 'Unkategorisiert',
+                stock: parseInt(document.getElementById('item-stock').value),
+                imageUrl: document.getElementById('item-image-url').value || `https://placehold.co/400x300/e2e8f0/64748b?text=Kein+Bild`,
+                createdAt: serverTimestamp()
+            };
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/articles`), newItem);
+                document.getElementById('add-item-form').reset();
+                hideModal('add-item-modal');
+            } catch (error) {
+                console.error("Fehler beim Hinzufügen des Artikels: ", error);
+            }
+        }
+
+        function listenToInventory() {
+            const q = query(collection(db, `artifacts/${appId}/public/data/articles`));
+            onSnapshot(q, (snapshot) => {
+                articlesCache = [];
+                snapshot.forEach(doc => articlesCache.push({ id: doc.id, ...doc.data() }));
+                renderInventory(articlesCache);
+            });
+        }
+        
+        // NEU: Hilfsfunktion für Kategorie-Icons
+        const getCategoryIcon = (category) => {
+            const catLower = category.toLowerCase();
+            let iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>`; // Default: Box
+            if (catLower.includes('gerät') || catLower.includes('technik')) {
+                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>`; // Printer
+            } else if (catLower.includes('schreib') || catLower.includes('stift')) {
+                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>`; // Pen
+            } else if (catLower.includes('papier') || catLower.includes('block')) {
+                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>`; // Document
+            }
+            return iconSvg;
+        };
+
+        // ÜBERARBEITET: `renderInventory` mit Akkordeon-Layout
+        function renderInventory(articles) {
+            const adminList = document.getElementById('inventory-list-admin');
+            const colleagueList = document.getElementById('inventory-list-colleague');
+            adminList.innerHTML = '';
+            colleagueList.innerHTML = '';
+
+            const groupedArticles = articles.reduce((acc, article) => {
+                const category = article.category || 'Unkategorisiert';
+                if (!acc[category]) acc[category] = [];
+                acc[category].push(article);
+                return acc;
+            }, {});
+            
+            if (articles.length === 0) {
+                 const placeholder = `<div class="text-center text-gray-500 py-8">Noch keine Artikel im Lager. Fügen Sie welche in der Admin-Ansicht hinzu.</div>`;
+                 adminList.innerHTML = placeholder;
+                 colleagueList.innerHTML = placeholder;
+                 return;
+            }
+
+            for (const category in groupedArticles) {
+                const categoryId = `category-${category.replace(/[^a-zA-Z0-9]/g, '-')}`;
+                const icon = getCategoryIcon(category);
+
+                let adminItemsHtml = '';
+                groupedArticles[category].forEach(article => {
+                    const isLowStock = article.stock <= LOW_STOCK_THRESHOLD;
+                    adminItemsHtml += `
+                        <div class="data-item flex justify-between items-center p-3 rounded-lg hover:bg-gray-50" data-name="${article.name.toLowerCase()}" data-category="${article.category.toLowerCase()}">
+                            <div class="flex items-center"><img src="${article.imageUrl}" onerror="this.src='https://placehold.co/100x75/e2e8f0/64748b?text=Bild'" class="w-16 h-12 object-cover rounded-md mr-4"><div><p class="font-bold">${article.name}</p><p class="text-sm text-gray-500">Art.-Nr.: ${article.articleNumber}</p></div></div>
+                            <div class="flex items-center space-x-4"><span class="text-2xl font-bold ${isLowStock ? 'text-red-500' : ''}">${article.stock}</span>${isLowStock ? '<div class="w-3 h-3 bg-red-500 rounded-full low-stock-indicator" title="Niedriger Lagerbestand"></div>' : ''}<button class="delete-item-btn text-gray-400 hover:text-red-600 text-2xl font-bold" data-id="${article.id}" data-name="${article.name}" title="Artikel löschen">&times;</button></div>
+                        </div>`;
+                });
+
+                let colleagueItemsHtml = '';
+                groupedArticles[category].forEach(article => {
+                    colleagueItemsHtml += `
+                        <div class="data-item bg-white rounded-lg shadow-md overflow-hidden transform hover:-translate-y-1 transition-transform duration-300" data-name="${article.name.toLowerCase()}" data-category="${article.category.toLowerCase()}">
+                            <img src="${article.imageUrl}" onerror="this.src='https://placehold.co/400x300/e2e8f0/64748b?text=Bild'" class="w-full h-40 object-cover"><div class="p-4"><h4 class="font-bold text-lg">${article.name}</h4><p class="text-sm text-gray-500 mb-2">Art.-Nr.: ${article.articleNumber}</p><p class="text-sm mb-4">Verfügbar: <span class="font-bold text-blue-600">${article.stock}</span></p><button class="request-item-btn w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300 ${article.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-id="${article.id}" data-name="${article.name}" data-stock="${article.stock}" ${article.stock === 0 ? 'disabled' : ''}>Anfragen</button></div>
+                        </div>`;
+                });
+
+                const accordionHtml = (content, grid = false) => `
+                    <div class="category-container bg-gray-50 rounded-lg shadow-sm" data-category-name="${category.toLowerCase()}">
+                        <button class="accordion-toggle flex justify-between items-center w-full p-4 text-left">
+                            <span class="flex items-center font-bold text-lg text-gray-700">${icon} ${category}</span>
+                            <svg class="chevron-icon w-6 h-6 transition-transform transform text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                        </button>
+                        <div class="accordion-content">
+                            <div class="${grid ? 'p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'p-2 space-y-1'}">
+                                ${content}
+                            </div>
+                        </div>
+                    </div>`;
+
+                adminList.innerHTML += accordionHtml(adminItemsHtml);
+                colleagueList.innerHTML += accordionHtml(colleagueItemsHtml, true);
+            }
+            addAccordionListeners();
+            document.querySelectorAll('.request-item-btn').forEach(btn => btn.addEventListener('click', openRequestModal));
+            document.querySelectorAll('.delete-item-btn').forEach(btn => btn.addEventListener('click', confirmDeleteItem));
+        }
+        
+        // NEU: Logik zum Öffnen/Schliessen des Akkordeons
+        function addAccordionListeners() {
+            document.querySelectorAll('.accordion-toggle').forEach(button => {
+                button.addEventListener('click', () => {
+                    const content = button.nextElementSibling;
+                    const icon = button.querySelector('.chevron-icon');
+                    const isOpen = content.classList.contains('open');
+                    
+                    // Optional: Alle anderen schliessen
+                    // document.querySelectorAll('.accordion-content.open').forEach(openContent => {
+                    //    if(openContent !== content) {
+                    //        openContent.classList.remove('open');
+                    //        openContent.previousElementSibling.querySelector('.chevron-icon').classList.remove('rotate-180');
+                    //    }
+                    // });
+
+                    content.classList.toggle('open');
+                    icon.classList.toggle('rotate-180');
+                });
+            });
+        }
+
+        // ÜBERARBEITET: `filterInventory` für Akkordeon-Layout
+        function filterInventory(searchTerm, view) {
+            const term = searchTerm.toLowerCase();
+            const listId = view === 'admin' ? 'inventory-list-admin' : 'inventory-list-colleague';
+            const listContainer = document.getElementById(listId);
+
+            listContainer.querySelectorAll('.category-container').forEach(container => {
+                let categoryHasVisibleItems = false;
+                const contentPanel = container.querySelector('.accordion-content');
+                const chevron = container.querySelector('.chevron-icon');
+
+                container.querySelectorAll('.data-item').forEach(item => {
+                    const name = item.dataset.name;
+                    const itemCategory = item.dataset.category;
+                    const matches = name.includes(term) || itemCategory.includes(term);
+                    item.style.display = matches ? '' : 'none';
+                    if (matches) categoryHasVisibleItems = true;
+                });
+
+                if (categoryHasVisibleItems) {
+                    container.style.display = '';
+                    if (term) { // Bei aktiver Suche ausklappen
+                        contentPanel.classList.add('open');
+                        chevron.classList.add('rotate-180');
+                    } else { // Bei leerer Suche einklappen
+                        contentPanel.classList.remove('open');
+                        chevron.classList.remove('rotate-180');
+                    }
+                } else {
+                    container.style.display = 'none';
+                }
+            });
+        }
+
+        function confirmDeleteItem(e) { /* ... unverändert ... */ }
+        function openRequestModal(e) { /* ... unverändert ... */ }
+        async function handleRequestItem(e) { /* ... unverändert ... */ }
+        function listenToRequests() { /* ... unverändert ... */ }
+        function renderRequests(requests) { /* ... unverändert ... */ }
+        async function approveRequest(e) { /* ... unverändert ... */ }
+        async function cancelRequest(e) { /* ... unverändert ... */ }
+        async function acknowledgeReceipt(e) { /* ... unverändert ... */ }
+        function showModal(modalId) { /* ... unverändert ... */ }
+        function hideModal(modalId) { /* ... unverändert ... */ }
+        let confirmCallback = null;
+        function showConfirmationModal(title, message, onConfirm) { /* ... unverändert ... */ }
+        
+        // Unveränderte Funktionen hier einfügen, um den Code lauffähig zu halten
+        confirmDeleteItem = (e) => {
+            const articleId = e.target.dataset.id;
+            const articleName = e.target.dataset.name;
+            showConfirmationModal('Artikel löschen?',`Sind Sie sicher, dass Sie "${articleName}" dauerhaft entfernen möchten?`,
+                async () => {
+                    try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/articles`, articleId)); } 
+                    catch (error) { console.error("Fehler beim Löschen: ", error); }
+                }
+            );
+        };
+        openRequestModal = (e) => {
+            const btn = e.target;
+            document.getElementById('request-article-id').value = btn.dataset.id;
+            document.getElementById('request-item-name').textContent = btn.dataset.name;
+            document.getElementById('request-item-stock').textContent = `Verfügbar: ${btn.dataset.stock}`;
+            document.getElementById('request-quantity').max = btn.dataset.stock;
+            document.getElementById('request-quantity').value = 1;
+            showModal('request-item-modal');
+        };
+        handleRequestItem = async (e) => {
+            e.preventDefault();
+            const newRequest = {
+                articleId: document.getElementById('request-article-id').value,
+                articleName: document.getElementById('request-item-name').textContent,
+                quantity: parseInt(document.getElementById('request-quantity').value),
+                requestedBy: currentUser.uid, status: 'pending', createdAt: serverTimestamp()
+            };
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/requests`), newRequest);
+                document.getElementById('request-item-form').reset();
+                hideModal('request-item-modal');
+            } catch (error) { console.error("Fehler bei Anfrage: ", error); }
+        };
+        listenToRequests = () => {
+            const q = query(collection(db, `artifacts/${appId}/public/data/requests`));
+            onSnapshot(q, (snapshot) => {
+                const allRequests = [];
+                snapshot.forEach(doc => allRequests.push({ id: doc.id, ...doc.data() }));
+                renderRequests(allRequests);
+            });
+        };
+        renderRequests = (requests) => {
+            const adminList = document.getElementById('request-list-admin');
+            const colleagueList = document.getElementById('request-list-colleague');
+            adminList.innerHTML = ''; colleagueList.innerHTML = '';
+            const pendingRequests = requests.filter(r => r.status === 'pending');
+            const myRequests = requests.filter(r => r.requestedBy === currentUser.uid);
+            if (pendingRequests.length === 0) { adminList.innerHTML = '<p class="text-gray-500">Keine offenen Anfragen.</p>'; } 
+            else { pendingRequests.forEach(req => { adminList.innerHTML += `<div class="bg-gray-100 p-3 rounded-lg"><p><span class="font-bold">${req.quantity}x ${req.articleName}</span></p><p class="text-sm text-gray-600">Von: ${req.requestedBy.substring(0, 8)}</p><button class="approve-request-btn mt-2 w-full bg-yellow-500 text-white font-semibold py-1 px-3 rounded hover:bg-yellow-600" data-id="${req.id}">Genehmigen</button></div>`; }); }
+            if (myRequests.length === 0) { colleagueList.innerHTML = '<p class="text-gray-500">Sie haben keine Anfragen.</p>'; } 
+            else { myRequests.forEach(req => {
+                    let statusText, buttonHtml;
+                    switch(req.status) {
+                        case 'pending': statusText = '<span class="text-yellow-600 font-semibold">Ausstehend</span>'; buttonHtml = `<button class="cancel-request-btn mt-2 w-full bg-gray-400 text-white text-sm py-1 px-3 rounded hover:bg-gray-500" data-id="${req.id}">Abbrechen</button>`; break;
+                        case 'approved': statusText = '<span class="text-blue-600 font-semibold">Genehmigt</span>'; buttonHtml = `<button class="acknowledge-receipt-btn mt-2 w-full bg-green-500 text-white font-semibold py-1 px-3 rounded hover:bg-green-600" data-id="${req.id}" data-article-id="${req.articleId}" data-quantity="${req.quantity}">Erhalt quittieren</button>`; break;
+                        case 'completed': statusText = '<span class="text-green-600 font-semibold">Abgeschlossen</span>'; buttonHtml = ''; break;
+                        default: statusText = req.status; buttonHtml = '';
+                    }
+                    colleagueList.innerHTML += `<div class="bg-gray-100 p-3 rounded-lg"><p><span class="font-bold">${req.quantity}x ${req.articleName}</span> - ${statusText}</p>${buttonHtml}</div>`;
+                });
+            }
+            document.querySelectorAll('.approve-request-btn').forEach(btn => btn.addEventListener('click', approveRequest));
+            document.querySelectorAll('.acknowledge-receipt-btn').forEach(btn => btn.addEventListener('click', acknowledgeReceipt));
+            document.querySelectorAll('.cancel-request-btn').forEach(btn => btn.addEventListener('click', cancelRequest));
+        };
+        approveRequest = async (e) => {
+            const requestId = e.target.dataset.id;
+            try { await updateDoc(doc(db, `artifacts/${appId}/public/data/requests`, requestId), { status: 'approved' }); } catch (error) { console.error("Fehler beim Genehmigen: ", error); }
+        };
+        cancelRequest = (e) => {
+            const requestId = e.target.dataset.id;
+            showConfirmationModal('Anfrage abbrechen?', 'Möchten Sie diese Anfrage wirklich zurückziehen?',
+                async () => { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/requests`, requestId)); } catch (error) { console.error("Fehler beim Abbrechen: ", error); } }
+            );
+        };
+        acknowledgeReceipt = async (e) => {
+            const requestId = e.target.dataset.id;
+            const articleId = e.target.dataset.articleId;
+            const quantity = parseInt(e.target.dataset.quantity);
+            const requestRef = doc(db, `artifacts/${appId}/public/data/requests`, requestId);
+            const articleRef = doc(db, `artifacts/${appId}/public/data/articles`, articleId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const articleDoc = await transaction.get(articleRef);
+                    if (!articleDoc.exists()) throw "Artikel nicht gefunden!";
+                    const newStock = articleDoc.data().stock - quantity;
+                    if (newStock < 0) throw "Nicht genügend Artikel auf Lager!";
+                    transaction.update(articleRef, { stock: newStock });
+                    transaction.update(requestRef, { status: 'completed' });
+                });
+            } catch (error) { console.error("Fehler beim Quittieren: ", error); alert("Fehler: " + error); }
+        };
+        showModal = (modalId) => {
+            const modal = document.getElementById(modalId);
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.style.opacity = 1, 10);
+        };
+        hideModal = (modalId) => {
+            const modal = document.getElementById(modalId);
+            modal.style.opacity = 0;
+            setTimeout(() => modal.classList.add('hidden'), 300);
+        };
+        showConfirmationModal = (title, message, onConfirm) => {
+            document.getElementById('confirmation-title').textContent = title;
+            document.getElementById('confirmation-message').textContent = message;
+            confirmCallback = onConfirm;
+            showModal('confirmation-modal');
+        };
+        document.getElementById('confirm-yes').addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideModal('confirmation-modal'); confirmCallback = null; });
+        document.getElementById('confirm-no').addEventListener('click', () => { hideModal('confirmation-modal'); confirmCallback = null; });
+
+
+    </script>
+</body>
+</html>
