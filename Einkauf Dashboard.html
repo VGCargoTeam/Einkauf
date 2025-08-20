@@ -1,515 +1,848 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Büroartikel-Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .modal, .accordion-content {
-            transition: all 0.3s ease-in-out;
+import React, { useState, useEffect, createContext, useContext } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, where, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+// Tailwind CSS is assumed to be available
+// For Font Awesome icons, you can include the script in the HTML head
+// <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+
+// Global variables provided by the canvas environment
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// Context for Auth and Firestore
+const AppContext = createContext();
+
+const AppProvider = ({ children }) => {
+  const [auth, setAuth] = useState(null);
+  const [db, setDb] = useState(null);
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      const app = initializeApp(firebaseConfig);
+      const authInstance = getAuth(app);
+      const dbInstance = getFirestore(app);
+
+      setAuth(authInstance);
+      setDb(dbInstance);
+
+      unsubscribe = onAuthStateChanged(authInstance, async (currentUser) => {
+        if (currentUser) {
+          setUser(currentUser);
+          // In a real application, user roles would be stored in Firestore
+          // For this demo, we use a fixed UID and a mock user to differentiate roles
+          const adminUID = 'simulated-admin-uid-12345';
+          setIsAdmin(currentUser.uid === adminUID);
+          // Check if it's the admin demo user
+          if (currentUser.email === 'admin@büro.de') {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
+        } else {
+          setUser(null);
+          setIsAdmin(false);
         }
-        .accordion-content {
-            max-height: 0;
-            overflow: hidden;
-        }
-        .accordion-content.open {
-            max-height: 1000vh; /* Grosser Wert, um Inhalt jeder Grösse zu erlauben */
-        }
-        .low-stock-indicator {
-            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: .5; }
-        }
-    </style>
-</head>
-<body class="bg-gray-100 text-gray-800">
+        setLoading(false);
+      });
 
-    <div id="app" class="container mx-auto p-4 md:p-8">
-
-        <!-- Header und Benutzer-Umschalter -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 bg-white p-4 rounded-lg shadow-md">
-            <div>
-                <h1 class="text-3xl font-bold text-gray-900">Büroartikel-Dashboard</h1>
-                <p id="user-id-display" class="text-sm text-gray-500 mt-1">Lade Benutzerinformationen...</p>
-            </div>
-            <div class="flex items-center space-x-4 mt-4 md:mt-0">
-                <span class="font-semibold">Ansicht wechseln:</span>
-                <select id="role-switcher" class="p-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500">
-                    <option value="colleague">Kollegen-Ansicht</option>
-                    <option value="admin">Admin-Ansicht</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- Hauptinhalt -->
-        <div id="content-area">
-            <!-- Admin-Ansicht -->
-            <div id="admin-view" class="hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div class="lg:col-span-2">
-                        <h2 class="text-2xl font-bold mb-4">Lagerbestand verwalten</h2>
-                        <div class="bg-white p-6 rounded-lg shadow-md">
-                            <button id="show-add-item-modal-btn" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300 mb-6 flex items-center justify-center space-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                                <span>Neuen Artikel hinzufügen</span>
-                            </button>
-                            <div class="flex items-center border-b-2 border-blue-500 py-2 mb-6">
-                                <input id="search-input-admin" class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none" type="text" placeholder="Artikel oder Kategorie suchen...">
-                            </div>
-                            <div id="inventory-list-admin" class="space-y-2">
-                                <!-- Akkordeon-Kategorien werden hier per JS eingefügt -->
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <h2 class="text-2xl font-bold mb-4">Offene Anfragen</h2>
-                        <div id="request-list-admin" class="bg-white p-6 rounded-lg shadow-md space-y-4">
-                            <!-- Anfragen werden hier per JS eingefügt -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Kollegen-Ansicht -->
-            <div id="colleague-view">
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div class="lg:col-span-2">
-                         <h2 class="text-2xl font-bold mb-4">Verfügbare Artikel</h2>
-                         <div class="bg-white p-6 rounded-lg shadow-md">
-                             <div class="flex items-center border-b-2 border-blue-500 py-2 mb-6">
-                                <input id="search-input-colleague" class="appearance-none bg-transparent border-none w-full text-gray-700 mr-3 py-1 px-2 leading-tight focus:outline-none" type="text" placeholder="Artikel oder Kategorie suchen...">
-                            </div>
-                            <div id="inventory-list-colleague" class="space-y-2">
-                                <!-- Akkordeon-Kategorien werden hier per JS eingefügt -->
-                            </div>
-                         </div>
-                    </div>
-                    <div>
-                        <h2 class="text-2xl font-bold mb-4">Meine Anfragen</h2>
-                        <div id="request-list-colleague" class="bg-white p-6 rounded-lg shadow-md space-y-4">
-                            <!-- Eigene Anfragen werden hier per JS eingefügt -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- Modals (unverändert) -->
-    <div id="add-item-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">...</div>
-    <div id="request-item-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">...</div>
-    <div id="confirmation-modal" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden opacity-0">...</div>
-    
-    <!-- Die Inhalte der Modals sind aus Gründen der Übersichtlichkeit eingeklappt, aber im Code identisch zum vorherigen Stand -->
-    <script>
-        document.getElementById('add-item-modal').innerHTML = `
-        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
-            <h3 class="text-2xl font-bold mb-6">Neuen Artikel anlegen</h3>
-            <form id="add-item-form">
-                <div class="space-y-4">
-                    <input type="text" id="item-name" placeholder="Artikelname (z.B. Tacker)" class="w-full p-3 border rounded-lg" required>
-                    <input type="text" id="item-number" placeholder="Artikelnummer (z.B. 4711)" class="w-full p-3 border rounded-lg" required>
-                    <input type="text" id="item-category" placeholder="Kategorie (z.B. Bürogeräte)" class="w-full p-3 border rounded-lg" required>
-                    <input type="number" id="item-stock" placeholder="Anfangslagerbestand" class="w-full p-3 border rounded-lg" required min="0">
-                    <input type="url" id="item-image-url" placeholder="Bild-URL (optional)" class="w-full p-3 border rounded-lg">
-                </div>
-                <div class="flex justify-end space-x-4 mt-8">
-                    <button type="button" id="cancel-add-item" class="px-6 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">Abbrechen</button>
-                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Speichern</button>
-                </div>
-            </form>
-        </div>`;
-        document.getElementById('request-item-modal').innerHTML = `
-        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md">
-            <h3 class="text-2xl font-bold mb-2">Artikel anfragen</h3>
-            <p id="request-item-name" class="text-lg mb-1"></p>
-            <p id="request-item-stock" class="text-sm text-gray-600 mb-6"></p>
-            <form id="request-item-form">
-                <input type="hidden" id="request-article-id">
-                <div>
-                    <label for="request-quantity" class="block font-medium mb-2">Gewünschte Menge:</label>
-                    <input type="number" id="request-quantity" class="w-full p-3 border rounded-lg" required min="1">
-                </div>
-                <div class="flex justify-end space-x-4 mt-8">
-                    <button type="button" id="cancel-request-item" class="px-6 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">Abbrechen</button>
-                    <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Anfrage senden</button>
-                </div>
-            </form>
-        </div>`;
-        document.getElementById('confirmation-modal').innerHTML = `
-        <div class="bg-white rounded-lg shadow-2xl p-8 w-full max-w-md text-center">
-            <h3 id="confirmation-title" class="text-xl font-bold mb-4"></h3>
-            <p id="confirmation-message" class="text-gray-700 mb-8"></p>
-            <div class="flex justify-center space-x-4">
-                <button id="confirm-no" class="px-8 py-2 bg-gray-300 rounded-lg hover:bg-gray-400">Nein</button>
-                <button id="confirm-yes" class="px-8 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Ja</button>
-            </div>
-        </div>`;
-    </script>
-
-
-    <script type="module">
-        // Firebase SDKs importieren
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { 
-            getFirestore, doc, collection, onSnapshot, runTransaction, query, 
-            addDoc, serverTimestamp, updateDoc, deleteDoc
-        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Firebase Konfiguration ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO", authDomain: "DEMO", projectId: "DEMO" };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'office-inventory-app';
-
-        // Firebase initialisieren
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        let currentUser = null;
-        let articlesCache = [];
-
-        // --- Authentifizierung ---
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                document.getElementById('user-id-display').textContent = `Angemeldet als: ${user.uid.substring(0, 8)}`;
-                initializeAppLogic();
-            } else {
-                signInAnonymously(auth).catch((error) => console.error("Anonyme Anmeldung fehlgeschlagen:", error));
-            }
+      if (initialAuthToken) {
+        signInWithCustomToken(authInstance, initialAuthToken).catch(async (e) => {
+          console.error("Custom token sign-in failed:", e);
+          // Fallback to anonymous sign-in if custom token fails
+          await signInAnonymously(authInstance);
         });
-        
-        // --- Globale Variablen und UI-Elemente ---
-        const roleSwitcher = document.getElementById('role-switcher');
-        const adminView = document.getElementById('admin-view');
-        const colleagueView = document.getElementById('colleague-view');
-        const LOW_STOCK_THRESHOLD = 5;
+      } else {
+        signInAnonymously(authInstance);
+      }
+    } catch (e) {
+      console.error("Firebase initialization or authentication failed:", e);
+      setError("Fehler bei der Initialisierung. Bitte versuchen Sie es erneut.");
+      setLoading(false);
+    }
 
-        // --- Hauptlogik ---
-        function initializeAppLogic() {
-            if (!currentUser) return;
-            setupEventListeners();
-            renderViews();
-            listenToInventory();
-            listenToRequests();
-        }
+    return () => unsubscribe();
+  }, []);
 
-        // --- Ansichten rendern ---
-        function renderViews() {
-            const currentRole = roleSwitcher.value;
-            adminView.style.display = currentRole === 'admin' ? 'block' : 'none';
-            colleagueView.style.display = currentRole === 'colleague' ? 'block' : 'none';
-            renderInventory(articlesCache); // Neu rendern bei Ansichtswechsel
-        }
+  return (
+    <AppContext.Provider value={{ auth, db, user, isAdmin, loading, error }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
 
-        // --- Event Listeners einrichten ---
-        function setupEventListeners() {
-            roleSwitcher.addEventListener('change', renderViews);
-            document.getElementById('show-add-item-modal-btn').addEventListener('click', () => showModal('add-item-modal'));
-            document.getElementById('cancel-add-item').addEventListener('click', () => hideModal('add-item-modal'));
-            document.getElementById('add-item-form').addEventListener('submit', handleAddItem);
-            document.getElementById('cancel-request-item').addEventListener('click', () => hideModal('request-item-modal'));
-            document.getElementById('request-item-form').addEventListener('submit', handleRequestItem);
-            document.getElementById('search-input-admin').addEventListener('input', (e) => filterInventory(e.target.value, 'admin'));
-            document.getElementById('search-input-colleague').addEventListener('input', (e) => filterInventory(e.target.value, 'colleague'));
-        }
+const Header = () => {
+  const { auth, user, isAdmin, error } = useContext(AppContext);
 
-        // --- Inventar-Logik ---
-        async function handleAddItem(e) {
-            e.preventDefault();
-            const newItem = {
-                name: document.getElementById('item-name').value,
-                articleNumber: document.getElementById('item-number').value,
-                category: document.getElementById('item-category').value.trim() || 'Unkategorisiert',
-                stock: parseInt(document.getElementById('item-stock').value),
-                imageUrl: document.getElementById('item-image-url').value || `https://placehold.co/400x300/e2e8f0/64748b?text=Kein+Bild`,
-                createdAt: serverTimestamp()
-            };
-            try {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/articles`), newItem);
-                document.getElementById('add-item-form').reset();
-                hideModal('add-item-modal');
-            } catch (error) {
-                console.error("Fehler beim Hinzufügen des Artikels: ", error);
-            }
-        }
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("Logout failed:", e);
+    }
+  };
 
-        function listenToInventory() {
-            const q = query(collection(db, `artifacts/${appId}/public/data/articles`));
-            onSnapshot(q, (snapshot) => {
-                articlesCache = [];
-                snapshot.forEach(doc => articlesCache.push({ id: doc.id, ...doc.data() }));
-                renderInventory(articlesCache);
-            });
-        }
-        
-        // NEU: Hilfsfunktion für Kategorie-Icons
-        const getCategoryIcon = (category) => {
-            const catLower = category.toLowerCase();
-            let iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /></svg>`; // Default: Box
-            if (catLower.includes('gerät') || catLower.includes('technik')) {
-                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>`; // Printer
-            } else if (catLower.includes('schreib') || catLower.includes('stift')) {
-                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>`; // Pen
-            } else if (catLower.includes('papier') || catLower.includes('block')) {
-                iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>`; // Document
-            }
-            return iconSvg;
-        };
+  return (
+    <header className="bg-white text-gray-800 p-4 shadow-lg border-b border-gray-200">
+      <div className="container mx-auto flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-indigo-600">Büroportal</h1>
+        {user && (
+          <div className="flex items-center space-x-4">
+            <span className="text-sm font-medium hidden sm:block">
+              Eingeloggt als: <span className="font-semibold">{isAdmin ? 'Admin' : 'Benutzer'}</span>
+            </span>
+            <button
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full font-semibold transition-colors duration-300 transform hover:scale-105 shadow-md"
+            >
+              Abmelden
+            </button>
+          </div>
+        )}
+      </div>
+      {error && (
+        <div className="text-red-500 text-center mt-2">{error}</div>
+      )}
+    </header>
+  );
+};
 
-        // ÜBERARBEITET: `renderInventory` mit Akkordeon-Layout
-        function renderInventory(articles) {
-            const adminList = document.getElementById('inventory-list-admin');
-            const colleagueList = document.getElementById('inventory-list-colleague');
-            adminList.innerHTML = '';
-            colleagueList.innerHTML = '';
+const ProductList = () => {
+  const { db, user } = useContext(AppContext);
+  const [products, setProducts] = useState([]);
+  const [cart, setCart] = useState({});
+  const [message, setMessage] = useState('');
+  const [currentPage, setCurrentPage] = useState('shop');
 
-            const groupedArticles = articles.reduce((acc, article) => {
-                const category = article.category || 'Unkategorisiert';
-                if (!acc[category]) acc[category] = [];
-                acc[category].push(article);
-                return acc;
-            }, {});
+  // Real-time listener for products
+  useEffect(() => {
+    if (!db) return;
+    const productsCollectionRef = collection(db, `artifacts/${appId}/public/data/products`);
+    const unsubscribe = onSnapshot(productsCollectionRef, (snapshot) => {
+      const productList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProducts(productList.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name)));
+    });
+
+    return () => unsubscribe();
+  }, [db]);
+
+  const addToCart = (productId, quantityToAdd) => {
+    const product = products.find(p => p.id === productId);
+    if (!product) return;
+    
+    // Ensure quantityToAdd is a number and is greater than 0
+    if (typeof quantityToAdd !== 'number' || quantityToAdd <= 0) {
+      setMessage('Bitte geben Sie eine gültige Menge ein.');
+      return;
+    }
+    
+    const currentCartQuantity = cart[productId]?.quantity || 0;
+    const newQuantity = currentCartQuantity + quantityToAdd;
+  
+    if (newQuantity > product.stock) {
+      setMessage(`Nicht genügend ${product.name} auf Lager. Verfügbar: ${product.stock}`);
+      return;
+    }
+  
+    setCart(prevCart => ({
+      ...prevCart,
+      [productId]: {
+        ...product,
+        quantity: newQuantity,
+      }
+    }));
+    setMessage(`${quantityToAdd}x ${product.name} zum Warenkorb hinzugefügt.`);
+  };
+
+  const getGroupedProducts = () => {
+    const grouped = {};
+    products.forEach(p => {
+      if (!grouped[p.category]) {
+        grouped[p.category] = [];
+      }
+      grouped[p.category].push(p);
+    });
+    return grouped;
+  };
+
+  const groupedProducts = getGroupedProducts();
+
+  const renderContent = () => {
+    switch (currentPage) {
+      case 'shop':
+        return (
+          <>
+            <div className="bg-indigo-600 text-white py-20 px-8 rounded-b-3xl shadow-lg">
+              <div className="container mx-auto text-center">
+                <h2 className="text-4xl md:text-5xl font-extrabold mb-4 animate-fade-in">Bürobedarf einfach bestellen</h2>
+                <p className="text-lg md:text-xl mb-8 animate-fade-in-delay">Wählen Sie die benötigten Artikel aus und legen Sie sie in Ihren Warenkorb.</p>
+                <button
+                  onClick={() => setCurrentPage('cart')}
+                  className="bg-white text-indigo-600 font-bold px-8 py-4 rounded-full shadow-xl hover:bg-gray-100 transition-colors duration-300 transform hover:scale-105 animate-bounce"
+                >
+                  Warenkorb ({Object.keys(cart).length}) <i className="fas fa-shopping-cart ml-2"></i>
+                </button>
+              </div>
+            </div>
             
-            if (articles.length === 0) {
-                 const placeholder = `<div class="text-center text-gray-500 py-8">Noch keine Artikel im Lager. Fügen Sie welche in der Admin-Ansicht hinzu.</div>`;
-                 adminList.innerHTML = placeholder;
-                 colleagueList.innerHTML = placeholder;
-                 return;
-            }
-
-            for (const category in groupedArticles) {
-                const categoryId = `category-${category.replace(/[^a-zA-Z0-9]/g, '-')}`;
-                const icon = getCategoryIcon(category);
-
-                let adminItemsHtml = '';
-                groupedArticles[category].forEach(article => {
-                    const isLowStock = article.stock <= LOW_STOCK_THRESHOLD;
-                    adminItemsHtml += `
-                        <div class="data-item flex justify-between items-center p-3 rounded-lg hover:bg-gray-50" data-name="${article.name.toLowerCase()}" data-category="${article.category.toLowerCase()}">
-                            <div class="flex items-center"><img src="${article.imageUrl}" onerror="this.src='https://placehold.co/100x75/e2e8f0/64748b?text=Bild'" class="w-16 h-12 object-cover rounded-md mr-4"><div><p class="font-bold">${article.name}</p><p class="text-sm text-gray-500">Art.-Nr.: ${article.articleNumber}</p></div></div>
-                            <div class="flex items-center space-x-4"><span class="text-2xl font-bold ${isLowStock ? 'text-red-500' : ''}">${article.stock}</span>${isLowStock ? '<div class="w-3 h-3 bg-red-500 rounded-full low-stock-indicator" title="Niedriger Lagerbestand"></div>' : ''}<button class="delete-item-btn text-gray-400 hover:text-red-600 text-2xl font-bold" data-id="${article.id}" data-name="${article.name}" title="Artikel löschen">&times;</button></div>
-                        </div>`;
-                });
-
-                let colleagueItemsHtml = '';
-                groupedArticles[category].forEach(article => {
-                    colleagueItemsHtml += `
-                        <div class="data-item bg-white rounded-lg shadow-md overflow-hidden transform hover:-translate-y-1 transition-transform duration-300" data-name="${article.name.toLowerCase()}" data-category="${article.category.toLowerCase()}">
-                            <img src="${article.imageUrl}" onerror="this.src='https://placehold.co/400x300/e2e8f0/64748b?text=Bild'" class="w-full h-40 object-cover"><div class="p-4"><h4 class="font-bold text-lg">${article.name}</h4><p class="text-sm text-gray-500 mb-2">Art.-Nr.: ${article.articleNumber}</p><p class="text-sm mb-4">Verfügbar: <span class="font-bold text-blue-600">${article.stock}</span></p><button class="request-item-btn w-full bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300 ${article.stock === 0 ? 'opacity-50 cursor-not-allowed' : ''}" data-id="${article.id}" data-name="${article.name}" data-stock="${article.stock}" ${article.stock === 0 ? 'disabled' : ''}>Anfragen</button></div>
-                        </div>`;
-                });
-
-                const accordionHtml = (content, grid = false) => `
-                    <div class="category-container bg-gray-50 rounded-lg shadow-sm" data-category-name="${category.toLowerCase()}">
-                        <button class="accordion-toggle flex justify-between items-center w-full p-4 text-left">
-                            <span class="flex items-center font-bold text-lg text-gray-700">${icon} ${category}</span>
-                            <svg class="chevron-icon w-6 h-6 transition-transform transform text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-                        </button>
-                        <div class="accordion-content">
-                            <div class="${grid ? 'p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'p-2 space-y-1'}">
-                                ${content}
-                            </div>
+            <div className="container mx-auto p-8">
+              {Object.keys(groupedProducts).map(category => (
+                <div key={category} className="mb-12">
+                  <h2 className="text-3xl font-bold mb-6 text-gray-800 border-b-2 border-indigo-400 pb-2">{category}</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {groupedProducts[category].map(product => (
+                      <div key={product.id} className="bg-white p-6 rounded-xl shadow-lg border border-gray-200 flex flex-col items-center text-center transition-transform duration-300 transform hover:scale-105 hover:shadow-2xl">
+                        <div className="relative w-full h-40 mb-4">
+                          <img 
+                            src={product.imageURL || `https://placehold.co/150x150/E2E8F0/1A202C?text=Kein+Bild`} 
+                            alt={product.name} 
+                            className="w-full h-full object-cover rounded-lg" 
+                          />
+                          <span className={`absolute top-2 right-2 px-2 py-1 text-xs font-bold rounded-full ${product.stock > 0 ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                            Lagerbestand: {product.stock}
+                          </span>
                         </div>
-                    </div>`;
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">{product.name}</h3>
+                        <p className="text-sm text-gray-600 mb-1">Artikel-Nr.: {product.itemNumber}</p>
+                        <p className="text-sm text-gray-600 mb-4 flex-1">{product.description}</p>
+                        
+                        <div className="flex items-center space-x-2 mt-auto">
+                          <input
+                            type="number"
+                            defaultValue="1"
+                            min="1"
+                            max={product.stock}
+                            className="w-20 p-2 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            id={`quantity-${product.id}`}
+                            onChange={(e) => {
+                              const inputQuantity = parseInt(e.target.value, 10);
+                              const newCart = { ...cart };
+                              if (inputQuantity > 0 && inputQuantity <= product.stock) {
+                                newCart[product.id] = { ...product, quantity: inputQuantity };
+                                setCart(newCart);
+                              } else {
+                                delete newCart[product.id];
+                                setCart(newCart);
+                                setMessage('Bitte geben Sie eine gültige Menge ein.');
+                              }
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              const quantity = parseInt(document.getElementById(`quantity-${product.id}`).value, 10);
+                              addToCart(product.id, quantity);
+                            }}
+                            className="bg-indigo-600 text-white p-3 rounded-full shadow-md hover:bg-indigo-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            disabled={product.stock <= 0}
+                          >
+                            <i className="fas fa-plus"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      case 'cart':
+        return (
+          <ShoppingCart cart={cart} setCart={setCart} user={user} db={db} appId={appId} setMessage={setMessage} />
+        );
+      default:
+        return null;
+    }
+  };
 
-                adminList.innerHTML += accordionHtml(adminItemsHtml);
-                colleagueList.innerHTML += accordionHtml(colleagueItemsHtml, true);
-            }
-            addAccordionListeners();
-            document.querySelectorAll('.request-item-btn').forEach(btn => btn.addEventListener('click', openRequestModal));
-            document.querySelectorAll('.delete-item-btn').forEach(btn => btn.addEventListener('click', confirmDeleteItem));
+  return (
+    <>
+      {message && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-green-500 text-white p-4 rounded-lg shadow-xl z-50 animate-fade-in-down">
+          {message}
+        </div>
+      )}
+      {renderContent()}
+    </>
+  );
+};
+
+const ShoppingCart = ({ cart, setCart, user, db, appId, setMessage }) => {
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const placeOrder = async () => {
+    setIsProcessing(true);
+    const orderNumber = `ORD-${Date.now()}`;
+    const orderedItems = Object.values(cart);
+
+    if (orderedItems.length === 0) {
+      setMessage('Der Warenkorb ist leer.');
+      setIsProcessing(false);
+      return;
+    }
+
+    try {
+      const ordersCollectionRef = collection(db, `artifacts/${appId}/public/data/orders`);
+      await setDoc(doc(ordersCollectionRef, orderNumber), {
+        orderNumber: orderNumber,
+        userId: user.uid,
+        userName: `Benutzer ${user.uid.substring(0, 4)}`,
+        items: orderedItems.map(item => ({
+          name: item.name,
+          itemNumber: item.itemNumber,
+          quantity: item.quantity,
+          imageURL: item.imageURL,
+        })),
+        status: 'Ausstehend',
+        timestamp: serverTimestamp(),
+      });
+
+      for (const item of orderedItems) {
+        const productDocRef = doc(db, `artifacts/${appId}/public/data/products`, item.id);
+        const productDoc = await getDoc(productDocRef);
+        if (productDoc.exists()) {
+          const newStock = productDoc.data().stock - item.quantity;
+          await updateDoc(productDocRef, {
+            stock: newStock,
+          });
         }
-        
-        // NEU: Logik zum Öffnen/Schliessen des Akkordeons
-        function addAccordionListeners() {
-            document.querySelectorAll('.accordion-toggle').forEach(button => {
-                button.addEventListener('click', () => {
-                    const content = button.nextElementSibling;
-                    const icon = button.querySelector('.chevron-icon');
-                    const isOpen = content.classList.contains('open');
-                    
-                    // Optional: Alle anderen schliessen
-                    // document.querySelectorAll('.accordion-content.open').forEach(openContent => {
-                    //    if(openContent !== content) {
-                    //        openContent.classList.remove('open');
-                    //        openContent.previousElementSibling.querySelector('.chevron-icon').classList.remove('rotate-180');
-                    //    }
-                    // });
+      }
 
-                    content.classList.toggle('open');
-                    icon.classList.toggle('rotate-180');
-                });
-            });
+      setMessage('Bestellung erfolgreich aufgegeben! Sie erhalten eine Bestätigung.');
+      setCart({});
+    } catch (e) {
+      console.error("Error placing order:", e);
+      setMessage("Fehler beim Aufgeben der Bestellung. Bitte versuchen Sie es erneut.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="container mx-auto p-8">
+      <h2 className="text-3xl font-bold mb-6 text-gray-800">Ihr Warenkorb</h2>
+      <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+        {Object.values(cart).length === 0 ? (
+          <p className="text-center text-gray-500 py-8">Ihr Warenkorb ist leer.</p>
+        ) : (
+          <>
+            <ul className="space-y-4 mb-6">
+              {Object.values(cart).map(item => (
+                <li key={item.id} className="flex items-center space-x-4 bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100">
+                  <img src={item.imageURL || 'https://placehold.co/80x80/E2E8F0/1A202C?text=Bild'} alt={item.name} className="w-16 h-16 rounded-lg object-cover" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">{item.name}</p>
+                    <p className="text-sm text-gray-600">Menge: {item.quantity}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newCart = { ...cart };
+                      delete newCart[item.id];
+                      setCart(newCart);
+                      setMessage(`${item.name} aus dem Warenkorb entfernt.`);
+                    }}
+                    className="text-red-500 hover:text-red-700 transition-colors p-2 rounded-full hover:bg-red-100"
+                  >
+                    <i className="fas fa-trash"></i>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={placeOrder}
+              disabled={isProcessing}
+              className="w-full bg-indigo-600 text-white px-6 py-3 rounded-full font-semibold shadow-md hover:bg-indigo-700 transition-colors duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
+            >
+              {isProcessing ? 'Bestellung wird verarbeitet...' : 'Bestellung aufgeben'}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const AdminDashboard = () => {
+  const { db, user } = useContext(AppContext);
+  const [orders, setOrders] = useState([]);
+  const [filteredOrders, setFilteredOrders] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [message, setMessage] = useState('');
+  const [currentTab, setCurrentTab] = useState('orders');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
+  // Add a new state for the product to be added
+  const [newProduct, setNewProduct] = useState({
+    name: '',
+    itemNumber: '',
+    category: '',
+    description: '',
+    stock: 0,
+    imageURL: '',
+  });
+
+  // Real-time listener for orders
+  useEffect(() => {
+    if (!db) return;
+    const ordersCollectionRef = collection(db, `artifacts/${appId}/public/data/orders`);
+    const unsubscribe = onSnapshot(ordersCollectionRef, (snapshot) => {
+      const orderList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setOrders(orderList);
+      setFilteredOrders(orderList); // Initialize with all orders
+    });
+    return () => unsubscribe();
+  }, [db]);
+
+  // Real-time listener for products
+  useEffect(() => {
+    if (!db) return;
+    const productsCollectionRef = collection(db, `artifacts/${appId}/public/data/products`);
+    const unsubscribe = onSnapshot(productsCollectionRef, (snapshot) => {
+      const productList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setProducts(productList.sort((a, b) => a.name.localeCompare(b.name)));
+    });
+    return () => unsubscribe();
+  }, [db]);
+
+  // Filtering logic
+  useEffect(() => {
+    let tempOrders = [...orders];
+
+    if (searchTerm) {
+      tempOrders = tempOrders.filter(order =>
+        order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        order.userName.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (dateRange.start && dateRange.end) {
+      const startDate = new Date(dateRange.start);
+      const endDate = new Date(dateRange.end);
+      tempOrders = tempOrders.filter(order => {
+        const orderDate = order.timestamp?.toDate();
+        return orderDate >= startDate && orderDate <= endDate;
+      });
+    }
+
+    setFilteredOrders(tempOrders);
+  }, [orders, searchTerm, dateRange]);
+
+  const addNewProduct = async (e) => {
+    e.preventDefault();
+    if (!newProduct.name || !newProduct.itemNumber || !newProduct.category) {
+      setMessage('Bitte füllen Sie alle erforderlichen Felder aus.');
+      return;
+    }
+
+    try {
+      const productsCollectionRef = collection(db, `artifacts/${appId}/public/data/products`);
+      await setDoc(doc(productsCollectionRef), { ...newProduct, stock: parseInt(newProduct.stock, 10) });
+      setMessage('Neuer Artikel erfolgreich hinzugefügt!');
+      setNewProduct({
+        name: '',
+        itemNumber: '',
+        category: '',
+        description: '',
+        stock: 0,
+        imageURL: '',
+      });
+    } catch (e) {
+      console.error("Error adding new product:", e);
+      setMessage("Fehler beim Hinzufügen des Artikels.");
+    }
+  };
+
+  const updateProductStock = async (productId, newStock) => {
+    try {
+      const productDocRef = doc(db, `artifacts/${appId}/public/data/products`, productId);
+      await updateDoc(productDocRef, {
+        stock: parseInt(newStock, 10),
+      });
+      setMessage('Lagerbestand erfolgreich aktualisiert!');
+    } catch (e) {
+      console.error("Error updating stock:", e);
+      setMessage("Fehler beim Aktualisieren des Lagerbestands.");
+    }
+  };
+
+  const fulfillOrder = async (orderId) => {
+    try {
+      const orderDocRef = doc(db, `artifacts/${appId}/public/data/orders`, orderId);
+      await updateDoc(orderDocRef, {
+        status: 'Ausgegeben',
+        fulfillmentTimestamp: serverTimestamp(),
+        // Store who fulfilled the order
+        fulfilledBy: `Admin ${user.uid.substring(0, 4)}`
+      });
+      setMessage(`Bestellung ${orderId} als 'Ausgegeben' markiert.`);
+    } catch (e) {
+      console.error("Error fulfilling order:", e);
+      setMessage("Fehler beim Aktualisieren der Bestellung.");
+    }
+  };
+
+  const handleDateChange = (e) => {
+    const { name, value } = e.target;
+    setDateRange(prev => ({ ...prev, [name]: value }));
+  };
+
+  return (
+    <div className="container mx-auto p-8 space-y-8">
+      <h1 className="text-4xl font-bold text-gray-800 mb-6">Admin Dashboard</h1>
+
+      {message && <div className="bg-indigo-100 text-indigo-700 p-4 rounded-lg mb-4 text-center">{message}</div>}
+
+      {/* Tabs for Navigation */}
+      <div className="flex justify-center border-b border-gray-300">
+        <button
+          onClick={() => setCurrentTab('orders')}
+          className={`px-6 py-3 font-semibold transition-colors ${currentTab === 'orders' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-indigo-600'}`}
+        >
+          Bestellungen
+        </button>
+        <button
+          onClick={() => setCurrentTab('products')}
+          className={`px-6 py-3 font-semibold transition-colors ${currentTab === 'products' ? 'border-b-4 border-indigo-600 text-indigo-600' : 'text-gray-500 hover:text-indigo-600'}`}
+        >
+          Artikel verwalten
+        </button>
+      </div>
+
+      {currentTab === 'orders' && (
+        <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+          <h2 className="text-2xl font-bold mb-4">Bestellungen</h2>
+          {/* Search and Filter */}
+          <div className="mb-6 space-y-4 md:space-y-0 md:flex md:space-x-4">
+            <input
+              type="text"
+              placeholder="Nach Bestell-Nr. oder Benutzer suchen"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <div className="flex space-x-2">
+              <input
+                type="date"
+                name="start"
+                value={dateRange.start}
+                onChange={handleDateChange}
+                className="p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <input
+                type="date"
+                name="end"
+                value={dateRange.end}
+                onChange={handleDateChange}
+                className="p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+          <div className="space-y-4">
+            {filteredOrders.length === 0 ? (
+              <p className="text-center text-gray-500">Keine Bestellungen gefunden.</p>
+            ) : (
+              filteredOrders.map(order => (
+                <div key={order.id} className={`p-4 rounded-lg shadow-sm border ${order.status === 'Ausstehend' ? 'border-yellow-400 bg-yellow-50' : 'border-green-400 bg-green-50'}`}>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-lg text-gray-900">Bestell-Nr.: {order.orderNumber}</h3>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${order.status === 'Ausstehend' ? 'bg-yellow-500 text-white' : 'bg-green-500 text-white'}`}>
+                      {order.status}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mb-1">Bestellt von: <span className="font-medium text-gray-800">{order.userName}</span></p>
+                  <p className="text-sm text-gray-600">Datum: <span className="font-medium text-gray-800">{new Date(order.timestamp?.toDate()).toLocaleString()}</span></p>
+                  <ul className="list-disc list-inside mt-4 text-sm space-y-1">
+                    {order.items.map((item, index) => (
+                      <li key={index} className="text-gray-700">
+                        <span className="font-medium">{item.name}</span> ({item.quantity} Stk.)
+                      </li>
+                    ))}
+                  </ul>
+                  {order.status === 'Ausstehend' && (
+                    <button
+                      onClick={() => fulfillOrder(order.id)}
+                      className="mt-4 bg-green-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:bg-green-700 transition-colors transform hover:scale-105"
+                    >
+                      Als 'Ausgegeben' markieren
+                    </button>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {currentTab === 'products' && (
+        <div className="space-y-8">
+          {/* Abschnitt: Neuer Artikel hinzufügen */}
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+            <h2 className="text-2xl font-bold mb-4">Neuen Artikel hinzufügen</h2>
+            <form onSubmit={addNewProduct} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                placeholder="Name des Artikels"
+                value={newProduct.name}
+                onChange={(e) => setNewProduct({ ...newProduct, name: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Artikelnummer"
+                value={newProduct.itemNumber}
+                onChange={(e) => setNewProduct({ ...newProduct, itemNumber: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Kategorie"
+                value={newProduct.category}
+                onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Beschreibung"
+                value={newProduct.description}
+                onChange={(e) => setNewProduct({ ...newProduct, description: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <input
+                type="number"
+                placeholder="Lagerbestand"
+                value={newProduct.stock}
+                onChange={(e) => setNewProduct({ ...newProduct, stock: parseInt(e.target.value, 10) })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+                min="0"
+              />
+              <input
+                type="text"
+                placeholder="Bild-URL (z.B. https://...)"
+                value={newProduct.imageURL}
+                onChange={(e) => setNewProduct({ ...newProduct, imageURL: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg"
+              />
+              <button type="submit" className="col-span-1 md:col-span-2 bg-indigo-600 text-white p-3 rounded-full font-semibold shadow-md hover:bg-indigo-700 transition-colors transform hover:scale-105">
+                Artikel hinzufügen
+              </button>
+            </form>
+          </div>
+
+          {/* Abschnitt: Lagerbestand aktualisieren */}
+          <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+            <h2 className="text-2xl font-bold mb-4">Lagerbestand aktualisieren</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {products.map(product => (
+                <div key={product.id} className="flex items-center space-x-4 p-4 rounded-lg bg-gray-50 shadow-sm border border-gray-100">
+                  <span className="flex-1 font-semibold">{product.name}</span>
+                  <input
+                    type="number"
+                    defaultValue={product.stock}
+                    min="0"
+                    className="w-20 p-2 border border-gray-300 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => updateProductStock(product.id, parseInt(e.target.value, 10))}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Login = () => {
+  const { auth } = useContext(AppContext);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [message, setMessage] = useState('');
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setMessage('');
+    try {
+      if (isLoginMode) {
+        await signInWithEmailAndPassword(auth, email, password);
+      } else {
+        await createUserWithEmailAndPassword(auth, email, password);
+      }
+    } catch (e) {
+      console.error("Auth error:", e);
+      setMessage(`Anmeldefehler: ${e.message}`);
+    }
+  };
+
+  const handleDemoLogin = async (demoEmail, demoPassword) => {
+    setMessage('');
+    try {
+      await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
+    } catch (e) {
+      if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
+        try {
+          await createUserWithEmailAndPassword(auth, demoEmail, demoPassword);
+          await signInWithEmailAndPassword(auth, demoEmail, demoPassword);
+        } catch (createError) {
+          console.error("Demo user creation failed:", createError);
+          setMessage("Fehler bei der Erstellung des Demo-Benutzers.");
         }
+      } else {
+        console.error("Demo login error:", e);
+        setMessage("Fehler beim Demo-Login.");
+      }
+    }
+  };
 
-        // ÜBERARBEITET: `filterInventory` für Akkordeon-Layout
-        function filterInventory(searchTerm, view) {
-            const term = searchTerm.toLowerCase();
-            const listId = view === 'admin' ? 'inventory-list-admin' : 'inventory-list-colleague';
-            const listContainer = document.getElementById(listId);
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans">
+      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm text-center transform transition-all duration-300 hover:scale-105">
+        <h2 className="text-3xl font-bold mb-6 text-gray-800">{isLoginMode ? 'Anmelden' : 'Registrieren'}</h2>
+        {message && <div className="bg-red-100 text-red-700 p-3 rounded-lg mb-4">{message}</div>}
+        <form onSubmit={handleAuth} className="space-y-4">
+          <input
+            type="email"
+            placeholder="E-Mail-Adresse"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+            required
+          />
+          <input
+            type="password"
+            placeholder="Passwort"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors"
+            required
+          />
+          <button
+            type="submit"
+            className="w-full bg-indigo-600 text-white p-3 rounded-full font-semibold shadow-md hover:bg-indigo-700 transition-colors duration-300"
+          >
+            {isLoginMode ? 'Anmelden' : 'Registrieren'}
+          </button>
+        </form>
+        <div className="mt-4 text-sm">
+          <button
+            onClick={() => setIsLoginMode(!isLoginMode)}
+            className="text-indigo-600 hover:text-indigo-800 transition-colors font-medium"
+          >
+            {isLoginMode ? 'Kein Konto? Jetzt registrieren' : 'Sie haben bereits ein Konto? Anmelden'}
+          </button>
+        </div>
+        <div className="mt-6 border-t pt-6 border-gray-200">
+          <h3 className="text-lg font-semibold mb-3 text-gray-700">Demo-Anmeldungen</h3>
+          <div className="space-y-2">
+            <button
+              onClick={() => handleDemoLogin('admin@büro.de', 'admin123')}
+              className="w-full bg-gray-200 text-gray-800 p-3 rounded-full font-semibold hover:bg-gray-300 transition-colors"
+            >
+              Demo-Admin anmelden
+            </button>
+            <button
+              onClick={() => handleDemoLogin('user@büro.de', 'user123')}
+              className="w-full bg-gray-200 text-gray-800 p-3 rounded-full font-semibold hover:bg-gray-300 transition-colors"
+            >
+              Demo-Benutzer anmelden
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-            listContainer.querySelectorAll('.category-container').forEach(container => {
-                let categoryHasVisibleItems = false;
-                const contentPanel = container.querySelector('.accordion-content');
-                const chevron = container.querySelector('.chevron-icon');
+// Main App Component
+const App = () => {
+  const { user, isAdmin, loading, error } = useContext(AppContext);
 
-                container.querySelectorAll('.data-item').forEach(item => {
-                    const name = item.dataset.name;
-                    const itemCategory = item.dataset.category;
-                    const matches = name.includes(term) || itemCategory.includes(term);
-                    item.style.display = matches ? '' : 'none';
-                    if (matches) categoryHasVisibleItems = true;
-                });
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 font-sans">
+        <div className="loader"></div>
+      </div>
+    );
+  }
 
-                if (categoryHasVisibleItems) {
-                    container.style.display = '';
-                    if (term) { // Bei aktiver Suche ausklappen
-                        contentPanel.classList.add('open');
-                        chevron.classList.add('rotate-180');
-                    } else { // Bei leerer Suche einklappen
-                        contentPanel.classList.remove('open');
-                        chevron.classList.remove('rotate-180');
-                    }
-                } else {
-                    container.style.display = 'none';
-                }
-            });
+  if (error) {
+    return <div className="text-center p-8 text-red-500">{error}</div>;
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 font-sans">
+      <style jsx="true">{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .loader {
+            border: 8px solid #E2E8F0;
+            border-top: 8px solid #4F46E5;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
         }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 1s ease-in-out;
+        }
+        .animate-fade-in-down {
+            animation: fadeInDown 0.5s ease-in-out;
+        }
+        .animate-fade-in-delay {
+            animation: fadeIn 1s ease-in-out 0.5s forwards;
+            opacity: 0;
+        }
+        .animate-bounce {
+          animation: bounce 1s infinite;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+      <Header />
+      <main>
+        {isAdmin ? <AdminDashboard /> : <ProductList />}
+      </main>
+    </div>
+  );
+};
 
-        function confirmDeleteItem(e) { /* ... unverändert ... */ }
-        function openRequestModal(e) { /* ... unverändert ... */ }
-        async function handleRequestItem(e) { /* ... unverändert ... */ }
-        function listenToRequests() { /* ... unverändert ... */ }
-        function renderRequests(requests) { /* ... unverändert ... */ }
-        async function approveRequest(e) { /* ... unverändert ... */ }
-        async function cancelRequest(e) { /* ... unverändert ... */ }
-        async function acknowledgeReceipt(e) { /* ... unverändert ... */ }
-        function showModal(modalId) { /* ... unverändert ... */ }
-        function hideModal(modalId) { /* ... unverändert ... */ }
-        let confirmCallback = null;
-        function showConfirmationModal(title, message, onConfirm) { /* ... unverändert ... */ }
-        
-        // Unveränderte Funktionen hier einfügen, um den Code lauffähig zu halten
-        confirmDeleteItem = (e) => {
-            const articleId = e.target.dataset.id;
-            const articleName = e.target.dataset.name;
-            showConfirmationModal('Artikel löschen?',`Sind Sie sicher, dass Sie "${articleName}" dauerhaft entfernen möchten?`,
-                async () => {
-                    try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/articles`, articleId)); } 
-                    catch (error) { console.error("Fehler beim Löschen: ", error); }
-                }
-            );
-        };
-        openRequestModal = (e) => {
-            const btn = e.target;
-            document.getElementById('request-article-id').value = btn.dataset.id;
-            document.getElementById('request-item-name').textContent = btn.dataset.name;
-            document.getElementById('request-item-stock').textContent = `Verfügbar: ${btn.dataset.stock}`;
-            document.getElementById('request-quantity').max = btn.dataset.stock;
-            document.getElementById('request-quantity').value = 1;
-            showModal('request-item-modal');
-        };
-        handleRequestItem = async (e) => {
-            e.preventDefault();
-            const newRequest = {
-                articleId: document.getElementById('request-article-id').value,
-                articleName: document.getElementById('request-item-name').textContent,
-                quantity: parseInt(document.getElementById('request-quantity').value),
-                requestedBy: currentUser.uid, status: 'pending', createdAt: serverTimestamp()
-            };
-            try {
-                await addDoc(collection(db, `artifacts/${appId}/public/data/requests`), newRequest);
-                document.getElementById('request-item-form').reset();
-                hideModal('request-item-modal');
-            } catch (error) { console.error("Fehler bei Anfrage: ", error); }
-        };
-        listenToRequests = () => {
-            const q = query(collection(db, `artifacts/${appId}/public/data/requests`));
-            onSnapshot(q, (snapshot) => {
-                const allRequests = [];
-                snapshot.forEach(doc => allRequests.push({ id: doc.id, ...doc.data() }));
-                renderRequests(allRequests);
-            });
-        };
-        renderRequests = (requests) => {
-            const adminList = document.getElementById('request-list-admin');
-            const colleagueList = document.getElementById('request-list-colleague');
-            adminList.innerHTML = ''; colleagueList.innerHTML = '';
-            const pendingRequests = requests.filter(r => r.status === 'pending');
-            const myRequests = requests.filter(r => r.requestedBy === currentUser.uid);
-            if (pendingRequests.length === 0) { adminList.innerHTML = '<p class="text-gray-500">Keine offenen Anfragen.</p>'; } 
-            else { pendingRequests.forEach(req => { adminList.innerHTML += `<div class="bg-gray-100 p-3 rounded-lg"><p><span class="font-bold">${req.quantity}x ${req.articleName}</span></p><p class="text-sm text-gray-600">Von: ${req.requestedBy.substring(0, 8)}</p><button class="approve-request-btn mt-2 w-full bg-yellow-500 text-white font-semibold py-1 px-3 rounded hover:bg-yellow-600" data-id="${req.id}">Genehmigen</button></div>`; }); }
-            if (myRequests.length === 0) { colleagueList.innerHTML = '<p class="text-gray-500">Sie haben keine Anfragen.</p>'; } 
-            else { myRequests.forEach(req => {
-                    let statusText, buttonHtml;
-                    switch(req.status) {
-                        case 'pending': statusText = '<span class="text-yellow-600 font-semibold">Ausstehend</span>'; buttonHtml = `<button class="cancel-request-btn mt-2 w-full bg-gray-400 text-white text-sm py-1 px-3 rounded hover:bg-gray-500" data-id="${req.id}">Abbrechen</button>`; break;
-                        case 'approved': statusText = '<span class="text-blue-600 font-semibold">Genehmigt</span>'; buttonHtml = `<button class="acknowledge-receipt-btn mt-2 w-full bg-green-500 text-white font-semibold py-1 px-3 rounded hover:bg-green-600" data-id="${req.id}" data-article-id="${req.articleId}" data-quantity="${req.quantity}">Erhalt quittieren</button>`; break;
-                        case 'completed': statusText = '<span class="text-green-600 font-semibold">Abgeschlossen</span>'; buttonHtml = ''; break;
-                        default: statusText = req.status; buttonHtml = '';
-                    }
-                    colleagueList.innerHTML += `<div class="bg-gray-100 p-3 rounded-lg"><p><span class="font-bold">${req.quantity}x ${req.articleName}</span> - ${statusText}</p>${buttonHtml}</div>`;
-                });
-            }
-            document.querySelectorAll('.approve-request-btn').forEach(btn => btn.addEventListener('click', approveRequest));
-            document.querySelectorAll('.acknowledge-receipt-btn').forEach(btn => btn.addEventListener('click', acknowledgeReceipt));
-            document.querySelectorAll('.cancel-request-btn').forEach(btn => btn.addEventListener('click', cancelRequest));
-        };
-        approveRequest = async (e) => {
-            const requestId = e.target.dataset.id;
-            try { await updateDoc(doc(db, `artifacts/${appId}/public/data/requests`, requestId), { status: 'approved' }); } catch (error) { console.error("Fehler beim Genehmigen: ", error); }
-        };
-        cancelRequest = (e) => {
-            const requestId = e.target.dataset.id;
-            showConfirmationModal('Anfrage abbrechen?', 'Möchten Sie diese Anfrage wirklich zurückziehen?',
-                async () => { try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/requests`, requestId)); } catch (error) { console.error("Fehler beim Abbrechen: ", error); } }
-            );
-        };
-        acknowledgeReceipt = async (e) => {
-            const requestId = e.target.dataset.id;
-            const articleId = e.target.dataset.articleId;
-            const quantity = parseInt(e.target.dataset.quantity);
-            const requestRef = doc(db, `artifacts/${appId}/public/data/requests`, requestId);
-            const articleRef = doc(db, `artifacts/${appId}/public/data/articles`, articleId);
-            try {
-                await runTransaction(db, async (transaction) => {
-                    const articleDoc = await transaction.get(articleRef);
-                    if (!articleDoc.exists()) throw "Artikel nicht gefunden!";
-                    const newStock = articleDoc.data().stock - quantity;
-                    if (newStock < 0) throw "Nicht genügend Artikel auf Lager!";
-                    transaction.update(articleRef, { stock: newStock });
-                    transaction.update(requestRef, { status: 'completed' });
-                });
-            } catch (error) { console.error("Fehler beim Quittieren: ", error); alert("Fehler: " + error); }
-        };
-        showModal = (modalId) => {
-            const modal = document.getElementById(modalId);
-            modal.classList.remove('hidden');
-            setTimeout(() => modal.style.opacity = 1, 10);
-        };
-        hideModal = (modalId) => {
-            const modal = document.getElementById(modalId);
-            modal.style.opacity = 0;
-            setTimeout(() => modal.classList.add('hidden'), 300);
-        };
-        showConfirmationModal = (title, message, onConfirm) => {
-            document.getElementById('confirmation-title').textContent = title;
-            document.getElementById('confirmation-message').textContent = message;
-            confirmCallback = onConfirm;
-            showModal('confirmation-modal');
-        };
-        document.getElementById('confirm-yes').addEventListener('click', () => { if (confirmCallback) { confirmCallback(); } hideModal('confirmation-modal'); confirmCallback = null; });
-        document.getElementById('confirm-no').addEventListener('click', () => { hideModal('confirmation-modal'); confirmCallback = null; });
-
-
-    </script>
-</body>
-</html>
+export default () => (
+  <AppProvider>
+    <App />
+  </AppProvider>
+);
