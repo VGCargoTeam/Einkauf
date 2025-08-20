@@ -1,12 +1,23 @@
 {
-  "name": "buero-dashboard-google-sheets",
-  "version": "1.0.0",
-  "description": "Büroartikel-Dashboard mit Google Sheets als Backend.",
-  "main": "index.js",
+  "name": "office-supplies-portal",
+  "private": true,
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
-    "google-spreadsheet": "^4.1.1"
+    "jsonwebtoken": "^9.0.2",
+    "next": "^14.2.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4"
   }
 }
