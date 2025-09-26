@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bedarf Zentrale</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Inter Font -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .cart-flyout {
+            transform: translateX(100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        .cart-flyout.open {
+            transform: translateX(0);
+        }
+        /* Style for the dashboard table */
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 flex flex-col items-center min-h-screen text-gray-800 relative">
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden justify-center items-center p-4 z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full">
+            <h2 id="modal-title" class="text-2xl font-bold mb-4 text-center"></h2>
+            <p id="modal-message" class="text-gray-700 mb-6 text-center"></p>
+            <button onclick="closeModal()" class="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg hover:bg-indigo-700 transition-colors">OK</button>
+        </div>
+    </div>
+    
+    <!-- Login Page -->
+    <div id="login-page" class="flex flex-col items-center justify-center p-4 w-full max-w-md my-auto">
+        <div class="bg-white rounded-xl shadow-2xl p-10 w-full text-center">
+            <h1 class="text-4xl font-extrabold text-indigo-700 mb-4">Bedarf Zentrale</h1>
+            <p class="text-gray-600 mb-8">Willkommen! Bitte melden Sie sich an, um den Shop zu betreten.</p>
+            <input type="text" id="username" placeholder="Benutzername" class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-200 transition-all mb-4">
+            <input type="password" id="password" placeholder="Passwort" class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-indigo-200 transition-all mb-6">
+            <button id="login-button" class="w-full bg-indigo-600 text-white py-4 px-4 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors">Anmelden</button>
+        </div>
+    </div>
+
+    <!-- Main App Content -->
+    <div id="main-app" class="hidden flex-grow w-full p-4 sm:p-8">
+        
+        <!-- Header with dynamic content -->
+        <header class="flex flex-col sm:flex-row justify-between items-center mb-6 py-4 px-6 bg-white rounded-xl shadow-md sticky top-4 z-10">
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-indigo-700 mb-4 sm:mb-0" id="app-title"></h1>
+            <div class="flex items-center space-x-4">
+                <!-- Employee buttons -->
+                <button id="orders-button" class="text-gray-600 hover:text-indigo-600 transition-colors py-2 px-4 rounded-lg hidden">
+                    <i class="fa-solid fa-list-check mr-2"></i><span>Bestellungen</span>
+                </button>
+                <button id="cart-icon-button" class="relative text-2xl text-gray-600 hover:text-indigo-600 transition-colors hidden">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    <span id="cart-count" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">0</span>
+                </button>
+
+                <!-- Admin button -->
+                <button id="dashboard-button" class="text-gray-600 hover:text-indigo-600 transition-colors py-2 px-4 rounded-lg hidden">
+                    <i class="fa-solid fa-gauge-high mr-2"></i><span>Dashboard</span>
+                </button>
+
+                <button id="logout-button" class="bg-red-500 text-white py-2 px-6 rounded-lg shadow-md hover:bg-red-600 transition-colors">Abmelden</button>
+            </div>
+        </header>
+
+        <!-- Search Bar -->
+        <div class="mb-6 flex justify-center" id="search-bar-container">
+            <input type="text" id="product-search" placeholder="Artikel suchen..." class="w-full lg:max-w-xl p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+        </div>
+
+        <!-- Shop View (for employees) -->
+        <div id="shop-view" class="hidden flex-col lg:flex-row gap-8 mt-8">
+            <!-- Sidebar for Categories (Desktop) -->
+            <div class="hidden lg:block w-64 bg-white rounded-xl shadow-lg p-6 flex-shrink-0 self-start sticky top-44">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Kategorien</h2>
+                <div id="category-list" class="flex flex-col space-y-3">
+                    <button class="category-btn bg-indigo-600 text-white font-semibold py-2.5 px-4 rounded-lg hover:bg-indigo-700 transition-colors w-full text-left" data-category="Alle">Alle</button>
+                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Schreibwaren">Schreibwaren</button>
+                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Organisation">Organisation</button>
+                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Papierware">Papierware</button>
+                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Reinigung & Hygiene">Reinigung & Hygiene</button>
+                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Ordnen">Ordnen</button>
+                </div>
+            </div>
+
+            <!-- Main Product Content Area -->
+            <div class="flex-grow">
+                <!-- Dropdown for Categories (Mobile) -->
+                <div class="lg:hidden mb-4">
+                    <select id="category-dropdown" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="Alle">Alle Kategorien</option>
+                        <option value="Schreibwaren">Schreibwaren</option>
+                        <option value="Organisation">Organisation</option>
+                        <option value="Papierware">Papierware</option>
+                        <option value="Reinigung & Hygiene">Reinigung & Hygiene</option>
+                        <option value="Ordnen">Ordnen</option>
+                    </select>
+                </div>
+                
+                <p class="text-gray-600 text-center lg:text-left mb-6">
+                    Wählen Sie die gewünschten Artikel aus und legen Sie sie in den Warenkorb.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mb-8" id="product-list">
+                    <!-- Products will be loaded here by JavaScript -->
+                    <p class="text-gray-500 col-span-full text-center">Lade Produkte...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders View (for employees) -->
+        <div id="orders-view" class="hidden p-4 sm:p-8">
+            <h2 class="text-3xl font-bold mb-6 text-center lg:text-left">Ihre Bestellhistorie</h2>
+            <div id="orders-list" class="bg-white rounded-xl shadow-lg p-6 space-y-4">
+                <!-- Order history will be loaded here -->
+                <p class="text-gray-500 text-center">Lade Bestellungen...</p>
+            </div>
+            <button id="back-to-shop-button" class="mt-8 bg-indigo-600 text-white py-3 px-6 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors">
+                <i class="fa-solid fa-arrow-left mr-2"></i>Zum Shop zurück
+            </button>
+        </div>
+
+        <!-- Admin Dashboard View -->
+        <div id="admin-dashboard" class="hidden p-4 sm:p-8">
+            <h2 class="text-3xl font-bold mb-6 text-center lg:text-left">Verwaltungs-Dashboard</h2>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Stock Management Section -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-2xl font-semibold mb-4 text-gray-800">Lagerverwaltung</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse">
+                            <thead>
+                                <tr>
+                                    <th>Artikel</th>
+                                    <th>Kategorie</th>
+                                    <th>Bestand</th>
+                                    <th>Aktion</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stock-list">
+                                <!-- Stock items will be loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="text-gray-500 text-center italic mt-4" id="stock-loading-message">Lade Lagerdaten...</p>
+                </div>
+
+                <!-- All Orders Section -->
+                <div class="bg-white rounded-xl shadow-lg p-6">
+                    <h3 class="text-2xl font-semibold mb-4 text-gray-800">Alle Bestellungen</h3>
+                    <div id="all-orders-list" class="space-y-4">
+                        <!-- All orders will be loaded here -->
+                    </div>
+                    <p class="text-gray-500 text-center italic mt-4" id="orders-loading-message">Lade Bestelldaten...</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Shopping Cart Flyout -->
+    <div id="cart-flyout" class="fixed top-0 right-0 h-full w-full sm:w-80 bg-white shadow-2xl z-40 cart-flyout p-6 overflow-y-auto">
+        <div class="flex justify-between items-center mb-6 border-b pb-4">
+            <h2 class="text-2xl font-bold">Ihr Warenkorb</h2>
+            <button onclick="toggleCart()" class="text-gray-500 hover:text-gray-800 text-2xl"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="flyout-cart-items" class="space-y-4 mb-6">
+            <p class="text-gray-500 italic text-center" id="flyout-cart-empty-message">Ihr Warenkorb ist leer.</p>
+        </div>
+        
+        <div class="border-t pt-4">
+            <div class="flex justify-between items-center text-lg font-bold text-gray-800 mb-6">
+                <span>Gesamt:</span>
+                <span id="flyout-cart-total">0 Artikel</span>
+            </div>
+            
+            <div class="bg-sky-100 border border-sky-400 text-sky-800 px-4 py-3 rounded-lg relative mb-4">
+                <p class="text-sm">
+                    <span class="font-bold">Wichtiger Hinweis:</span> Bevor Sie bestellen, stellen Sie sicher, dass Sie die "Anleitung zur Google Apps Script" gelesen und die URLs angepasst haben.
+                </p>
+            </div>
+
+            <button id="flyout-order-button" class="w-full bg-indigo-600 text-white py-3 px-4 rounded-lg shadow-lg hover:bg-indigo-700 transition-colors disabled:bg-gray-400" disabled>
+                Bestellung abschicken
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // *** WICHTIG: Ersetzen Sie diese URLs durch Ihre eigenen, die Sie aus dem Google Apps Script-Setup erhalten. ***
+        const GOOGLE_SHEETS_PRODUCT_API_URL = "https://script.google.com/macros/s/AKfycbzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/exec?sheet=products";
+        const GOOGLE_SHEETS_ORDER_API_URL = "https://script.google.com/macros/s/AKfycbzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/exec";
+        const GOOGLE_SHEETS_HISTORY_API_URL = "https://script.google.com/macros/s/AKfycbzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz/exec?sheet=orders";
+        
+        // Liste der Benutzer und ihrer Rollen.
+        // Fügen Sie hier weitere Benutzer hinzu oder entfernen Sie sie.
+        // Für eine professionelle Lösung sollte dies in einem sicheren Backend gespeichert werden (z.B. Firebase).
+        const users = {
+            "Andreas Klassen": { password: "admin123", role: "admin" },
+            "Michael House": { password: "123", role: "employee" },
+            "Slawa Malik": { password: "123", role: "employee" },
+            "Heinrich Neufeld": { password: "123", role: "employee" },
+            "Benjamin Pankratz": { password: "123", role: "employee" },
+            "Erik Latinzew": { password: "123", role: "employee" },
+            "Marcel Fritsche": { password: "123", role: "employee" },
+            "Joanna Fritsche": { password: "123", role: "employee" },
+            "Waldemar Traudt": { password: "123", role: "employee" },
+            "Valentina Lang": { password: "123", role: "employee" },
+            "Eugen Beljakov": { password: "123", role: "employee" },
+            "Mike Becker": { password: "123", role: "employee" },
+            "Steffi Klassen": { password: "123", role: "employee" },
+            "Dennis Stscherbakow": { password: "123", role: "employee" },
+            "Sylvia Stöffen": { password: "123", role: "employee" },
+            "Silke Theiss": { password: "123", role: "employee" },
+            "Andrej Swetlitschnij": { password: "123", role: "employee" },
+            "Ines Kostük": { password: "123", role: "employee" },
+            "Magdalena Janusz": { password: "123", role: "employee" },
+            "Inge Huhn": { password: "123", role: "employee" },
+            "Kevin Kirst": { password: "123", role: "employee" }
+        };
+
+        // Konfigurierbarer Schwellenwert für niedrigen Bestand
+        const LOW_STOCK_THRESHOLD = 5;
+
+        let cart = {};
+        let products = [];
+        let isOrderProcessing = false;
+        let loggedInEmployee = null;
+        let userRole = null;
+
+        // DOM-Elemente
+        const loginPageEl = document.getElementById('login-page');
+        const mainAppEl = document.getElementById('main-app');
+        const appTitleEl = document.getElementById('app-title');
+        const usernameEl = document.getElementById('username');
+        const passwordEl = document.getElementById('password');
+        const loginButtonEl = document.getElementById('login-button');
+        const logoutButtonEl = document.getElementById('logout-button');
+        const ordersButtonEl = document.getElementById('orders-button');
+        const dashboardButtonEl = document.getElementById('dashboard-button');
+        const backToShopButtonEl = document.getElementById('back-to-shop-button');
+        const productSearchEl = document.getElementById('product-search');
+        const searchBarContainerEl = document.getElementById('search-bar-container');
+        const cartIconButtonEl = document.getElementById('cart-icon-button');
+        const cartCountEl = document.getElementById('cart-count');
+        const cartFlyoutEl = document.getElementById('cart-flyout');
+        const categoryDropdownEl = document.getElementById('category-dropdown');
+        const categoryButtons = document.querySelectorAll('.category-btn');
+        const productListEl = document.getElementById('product-list');
+        const shopViewEl = document.getElementById('shop-view');
+        const ordersViewEl = document.getElementById('orders-view');
+        const ordersListEl = document.getElementById('orders-list');
+        const adminDashboardEl = document.getElementById('admin-dashboard');
+        const stockListEl = document.getElementById('stock-list');
+        const allOrdersListEl = document.getElementById('all-orders-list');
+        const flyoutCartItemsEl = document.getElementById('flyout-cart-items');
+        const flyoutCartTotalEl = document.getElementById('flyout-cart-total');
+        const flyoutOrderButtonEl = document.getElementById('flyout-order-button');
+        const flyoutCartEmptyMessageEl = document.getElementById('flyout-cart-empty-message');
+        const modal = document.getElementById('confirmation-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const stockLoadingMessageEl = document.getElementById('stock-loading-message');
+        const ordersLoadingMessageEl = document.getElementById('orders-loading-message');
+
+        function showModal(title, message) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function toggleCart() {
+            cartFlyoutEl.classList.toggle('open');
+        }
+
+        function handleLogin() {
+            const username = usernameEl.value.trim();
+            const password = passwordEl.value.trim();
+            const user = users[username];
+
+            if (user && user.password === password) {
+                userRole = user.role;
+                loggedInEmployee = username;
+                
+                loginPageEl.classList.add('hidden');
+                mainAppEl.classList.remove('hidden');
+
+                if (userRole === 'admin') {
+                    appTitleEl.textContent = 'Admin-Dashboard';
+                    ordersButtonEl.classList.add('hidden');
+                    cartIconButtonEl.classList.add('hidden');
+                    dashboardButtonEl.classList.remove('hidden');
+                    searchBarContainerEl.classList.add('hidden');
+                    showAdminDashboard();
+                } else {
+                    appTitleEl.textContent = 'Mitarbeiter-Shop';
+                    ordersButtonEl.classList.remove('hidden');
+                    cartIconButtonEl.classList.remove('hidden');
+                    dashboardButtonEl.classList.add('hidden');
+                    searchBarContainerEl.classList.remove('hidden');
+                    fetchProducts();
+                    showShopView();
+                }
+            } else {
+                showModal("Anmeldefehler", "Ungültiger Benutzername oder ungültiges Passwort.");
+            }
+        }
+        
+        function handleLogout() {
+            loggedInEmployee = null;
+            userRole = null;
+            cart = {};
+            renderCart();
+            loginPageEl.classList.remove('hidden');
+            mainAppEl.classList.add('hidden');
+            usernameEl.value = '';
+            passwordEl.value = '';
+            products = [];
+            productListEl.innerHTML = '<p class="text-gray-500 col-span-full text-center">Lade Produkte...</p>';
+            cartFlyoutEl.classList.remove('open');
+            productSearchEl.value = '';
+        }
+
+        function hideAllViews() {
+            shopViewEl.classList.add('hidden');
+            ordersViewEl.classList.add('hidden');
+            adminDashboardEl.classList.add('hidden');
+        }
+
+        function showShopView() {
+            hideAllViews();
+            shopViewEl.classList.remove('hidden');
+            fetchProducts();
+        }
+
+        function showOrdersView() {
+            hideAllViews();
+            ordersViewEl.classList.remove('hidden');
+            fetchOrders();
+        }
+
+        function showAdminDashboard() {
+            hideAllViews();
+            adminDashboardEl.classList.remove('hidden');
+            fetchAdminData();
+        }
+
+        async function fetchProducts() {
+            try {
+                const response = await fetch(GOOGLE_SHEETS_PRODUCT_API_URL);
+                if (!response.ok) {
+                    throw new Error('Netzwerkantwort war nicht OK');
+                }
+                const data = await response.json();
+                products = data.map(item => ({
+                    ...item,
+                    stock: parseInt(item.stock),
+                    id: parseInt(item.id)
+                }));
+                renderProducts(products);
+            } catch (error) {
+                console.error("Fehler beim Laden der Produkte:", error);
+                productListEl.innerHTML = '<p class="text-red-500 col-span-full text-center">Fehler beim Laden der Produkte. Überprüfen Sie die URL und Ihre Skripteinstellungen.</p>';
+            }
+        }
+
+        async function fetchOrders() {
+            ordersListEl.innerHTML = '<p class="text-gray-500 text-center">Lade Bestellungen...</p>';
+            try {
+                const response = await fetch(`${GOOGLE_SHEETS_HISTORY_API_URL}&employee=${encodeURIComponent(loggedInEmployee)}`);
+                if (!response.ok) {
+                    throw new Error('Netzwerkantwort war nicht OK');
+                }
+                const orders = await response.json();
+
+                if (orders.length === 0) {
+                    ordersListEl.innerHTML = '<p class="text-gray-500 text-center">Sie haben noch keine Bestellungen getätigt.</p>';
+                    return;
+                }
+
+                ordersListEl.innerHTML = '';
+                orders.forEach(order => {
+                    const orderDate = new Date(order.timestamp);
+                    const orderEl = document.createElement('div');
+                    orderEl.className = 'bg-gray-100 p-4 rounded-lg shadow-inner';
+                    orderEl.innerHTML = `
+                        <h3 class="font-bold text-lg mb-1">Bestellung vom ${orderDate.toLocaleDateString()}</h3>
+                        <p class="text-gray-600 mb-2">${order.items}</p>
+                        <p class="text-sm text-gray-400">Status: <span class="text-green-500 font-semibold">abgeschickt</span></p>
+                    `;
+                    ordersListEl.appendChild(orderEl);
+                });
+
+            } catch (error) {
+                console.error("Fehler beim Laden der Bestellhistorie:", error);
+                ordersListEl.innerHTML = '<p class="text-red-500 text-center">Fehler beim Laden der Bestellhistorie.</p>';
+            }
+        }
+
+        async function fetchAdminData() {
+            stockLoadingMessageEl.classList.remove('hidden');
+            ordersLoadingMessageEl.classList.remove('hidden');
+
+            try {
+                // Fetch all products for stock management
+                const productResponse = await fetch(GOOGLE_SHEETS_PRODUCT_API_URL);
+                const productData = await productResponse.json();
+                products = productData.map(item => ({
+                    ...item,
+                    stock: parseInt(item.stock),
+                    id: parseInt(item.id)
+                }));
+                renderStockList();
+                stockLoadingMessageEl.classList.add('hidden');
+
+                // Fetch all orders
+                const ordersResponse = await fetch(`${GOOGLE_SHEETS_HISTORY_API_URL}&type=all`);
+                const allOrders = await ordersResponse.json();
+                renderAllOrders(allOrders);
+                ordersLoadingMessageEl.classList.add('hidden');
+            } catch (error) {
+                console.error("Fehler beim Laden der Admin-Daten:", error);
+                stockLoadingMessageEl.textContent = "Fehler beim Laden der Lagerdaten.";
+                ordersLoadingMessageEl.textContent = "Fehler beim Laden der Bestelldaten.";
+            }
+        }
+
+        function renderStockList() {
+            stockListEl.innerHTML = '';
+            if (products.length === 0) {
+                stockListEl.innerHTML = `<tr><td colspan="4" class="text-gray-500 text-center">Keine Produkte gefunden.</td></tr>`;
+                return;
+            }
+
+            products.forEach(product => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition-colors';
+                row.innerHTML = `
+                    <td>${product.name}</td>
+                    <td>${product.category}</td>
+                    <td>
+                        <input type="number" value="${product.stock}" data-id="${product.id}" class="stock-input w-24 p-2 border rounded-lg text-center" min="0">
+                    </td>
+                    <td>
+                        <button class="update-stock-btn bg-indigo-500 text-white py-1 px-3 rounded-lg text-sm hover:bg-indigo-600 transition-colors" data-id="${product.id}">
+                            <i class="fa-solid fa-sync mr-1"></i>Speichern
+                        </button>
+                    </td>
+                `;
+                stockListEl.appendChild(row);
+            });
+
+            document.querySelectorAll('.update-stock-btn').forEach(button => {
+                button.addEventListener('click', updateStock);
+            });
+        }
+
+        async function updateStock(event) {
+            const button = event.target.closest('.update-stock-btn');
+            const id = button.dataset.id;
+            const inputEl = document.querySelector(`.stock-input[data-id="${id}"]`);
+            const newStock = parseInt(inputEl.value);
+
+            if (isNaN(newStock) || newStock < 0) {
+                showModal("Ungültige Eingabe", "Bitte geben Sie eine gültige positive Zahl ein.");
+                return;
+            }
+
+            button.disabled = true;
+            button.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i>Speichern...`;
+
+            try {
+                const response = await fetch(GOOGLE_SHEETS_ORDER_API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sheet: "products",
+                        action: "updateStock",
+                        updates: [{ id: id, newStock: newStock }]
+                    })
+                });
+
+                // Request assumed to be successful due to 'no-cors'
+                showModal("Bestand aktualisiert", `Der Bestand wurde erfolgreich auf ${newStock} aktualisiert.`);
+            } catch (error) {
+                console.error("Fehler bei der Bestandsaktualisierung:", error);
+                showModal("Aktualisierung fehlgeschlagen", "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.");
+            } finally {
+                button.disabled = false;
+                button.innerHTML = `<i class="fa-solid fa-sync mr-1"></i>Speichern`;
+                // Re-fetch data to reflect changes
+                fetchAdminData();
+            }
+        }
+        
+        function renderAllOrders(orders) {
+            allOrdersListEl.innerHTML = '';
+            if (orders.length === 0) {
+                allOrdersListEl.innerHTML = '<p class="text-gray-500 text-center">Es gibt noch keine Bestellungen.</p>';
+                return;
+            }
+
+            orders.forEach(order => {
+                const orderDate = new Date(order.timestamp);
+                const orderEl = document.createElement('div');
+                orderEl.className = 'bg-gray-100 p-4 rounded-lg shadow-inner border-l-4 border-indigo-500';
+                orderEl.innerHTML = `
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <p class="text-xs text-gray-400 font-medium">Bestellung vom</p>
+                            <h3 class="font-bold text-lg">${orderDate.toLocaleDateString()}</h3>
+                        </div>
+                        <span class="bg-gray-200 text-gray-600 text-xs font-semibold px-2 py-1 rounded-full">${order.employeeName}</span>
+                    </div>
+                    <p class="text-gray-600">${order.items}</p>
+                `;
+                allOrdersListEl.appendChild(orderEl);
+            });
+        }
+
+        function renderProducts(productsToRender) {
+            productListEl.innerHTML = '';
+            
+            if (productsToRender.length === 0) {
+                productListEl.innerHTML = `<p class="text-gray-500 col-span-full text-center">Keine Produkte gefunden.</p>`;
+                return;
+            }
+
+            productsToRender.forEach(product => {
+                const isLowStock = product.stock > 0 && product.stock <= LOW_STOCK_THRESHOLD;
+                const lowStockBadge = isLowStock ? `
+                    <span class="absolute top-2 left-2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-lg">
+                        Wenig auf Lager
+                    </span>
+                ` : '';
+
+                const productEl = document.createElement('div');
+                productEl.className = 'relative bg-white rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 overflow-hidden transform hover:-translate-y-1';
+                productEl.innerHTML = `
+                    ${lowStockBadge}
+                    <div class="w-full h-40 bg-gray-200 flex items-center justify-center overflow-hidden">
+                         <img src="${product.image_url || `https://placehold.co/400x400/E5E7EB/6B7280?text=${product.name.replace(/\s/g, '+')}`}" 
+                              alt="${product.name}" 
+                              class="w-full h-full object-cover">
+                    </div>
+                    <div class="p-6">
+                        <h3 class="font-bold text-lg text-gray-900 mb-1">${product.name}</h3>
+                        <p class="text-gray-500 text-sm mb-3">Bestand: ${product.stock}</p>
+                        <button class="add-to-cart-btn w-full bg-indigo-600 text-white px-4 py-2.5 rounded-lg shadow-md hover:bg-indigo-700 transition-colors disabled:bg-gray-400" data-id="${product.id}" data-name="${product.name}" ${product.stock <= 0 ? 'disabled' : ''}>
+                            ${product.stock > 0 ? 'Hinzufügen' : 'Ausverkauft'}
+                        </button>
+                    </div>
+                `;
+                productListEl.appendChild(productEl);
+            });
+
+            document.querySelectorAll('.add-to-cart-btn').forEach(button => {
+                button.addEventListener('click', addToCart);
+            });
+        }
+
+        function addToCart(event) {
+            const id = event.target.dataset.id;
+            const name = event.target.dataset.name;
+            const product = products.find(p => p.id === parseInt(id));
+
+            if (product && product.stock > 0) {
+                if (cart[id]) {
+                    cart[id].quantity++;
+                } else {
+                    cart[id] = { name, quantity: 1 };
+                }
+                product.stock--;
+                
+                renderCart();
+                const selectedCategory = document.querySelector('.category-btn.bg-indigo-600').dataset.category;
+                handleSearchAndCategory(selectedCategory);
+
+                if (product.stock < LOW_STOCK_THRESHOLD && product.stock > 0) {
+                    showModal("Niedriger Bestand!", `Es sind nur noch ${product.stock} ${product.name} auf Lager. Bitte bestellen Sie nur, was Sie wirklich benötigen.`);
+                }
+            } else {
+                showModal("Nicht verfügbar", "Dieser Artikel ist leider nicht mehr auf Lager.");
+            }
+        }
+
+        function handleSearchAndCategory(category) {
+            const searchTerm = productSearchEl.value.toLowerCase();
+            const filteredProducts = products.filter(p => {
+                const matchesCategory = category === "Alle" || p.category === category;
+                const matchesSearch = p.name.toLowerCase().includes(searchTerm);
+                return matchesCategory && matchesSearch;
+            });
+            renderProducts(filteredProducts);
+        }
+
+        function renderCart() {
+            flyoutCartItemsEl.innerHTML = '';
+            let totalItems = 0;
+            const cartKeys = Object.keys(cart);
+
+            if (cartKeys.length === 0) {
+                flyoutCartEmptyMessageEl.classList.remove('hidden');
+                flyoutOrderButtonEl.disabled = true;
+            } else {
+                flyoutCartEmptyMessageEl.classList.add('hidden');
+                flyoutOrderButtonEl.disabled = false;
+                
+                cartKeys.forEach(id => {
+                    const item = cart[id];
+                    const itemEl = document.createElement('div');
+                    itemEl.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg shadow-sm border border-gray-100 mb-2';
+                    itemEl.innerHTML = `
+                        <span class="font-semibold text-gray-800">${item.name}</span>
+                        <div class="flex items-center space-x-2">
+                            <button class="bg-gray-200 text-gray-800 h-8 w-8 rounded-full hover:bg-gray-300 transition-colors" onclick="decrementQuantity(${id})"><i class="fa-solid fa-minus"></i></button>
+                            <span class="text-gray-600 font-bold">${item.quantity}</span>
+                            <button class="bg-gray-200 text-gray-800 h-8 w-8 rounded-full hover:bg-gray-300 transition-colors" onclick="incrementQuantity(${id})"><i class="fa-solid fa-plus"></i></button>
+                            <button class="text-red-500 hover:text-red-700 ml-2" onclick="removeItem(${id})"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    `;
+                    flyoutCartItemsEl.appendChild(itemEl);
+                    totalItems += item.quantity;
+                });
+            }
+            cartCountEl.textContent = totalItems;
+            flyoutCartTotalEl.textContent = `${totalItems} Artikel`;
+        }
+        
+        function incrementQuantity(id) {
+            const product = products.find(p => p.id === id);
+            if (product && product.stock > 0) {
+                cart[id].quantity++;
+                product.stock--;
+                renderCart();
+                const selectedCategory = document.querySelector('.category-btn.bg-indigo-600').dataset.category;
+                handleSearchAndCategory(selectedCategory);
+            } else {
+                showModal("Nicht verfügbar", "Dieser Artikel ist leider nicht mehr auf Lager.");
+            }
+        }
+
+        function decrementQuantity(id) {
+            if (cart[id].quantity > 1) {
+                cart[id].quantity--;
+                const product = products.find(p => p.id === id);
+                if (product) product.stock++;
+                renderCart();
+                const selectedCategory = document.querySelector('.category-btn.bg-indigo-600').dataset.category;
+                handleSearchAndCategory(selectedCategory);
+            } else {
+                removeItem(id);
+            }
+        }
+
+        function removeItem(id) {
+            const product = products.find(p => p.id === id);
+            if (product) product.stock += cart[id].quantity;
+            delete cart[id];
+            renderCart();
+            const selectedCategory = document.querySelector('.category-btn.bg-indigo-600').dataset.category;
+            handleSearchAndCategory(selectedCategory);
+        }
+
+        async function submitOrder() {
+            if (Object.keys(cart).length === 0) {
+                showModal("Warenkorb leer", "Ihr Warenkorb ist leer. Bitte fügen Sie Artikel hinzu.");
+                return;
+            }
+            
+            if (isOrderProcessing) return;
+            isOrderProcessing = true;
+            flyoutOrderButtonEl.disabled = true;
+            flyoutOrderButtonEl.textContent = 'Bestelle...';
+
+            const orderData = {
+                sheet: "orders",
+                action: "placeOrder",
+                employeeName: loggedInEmployee,
+                orderItems: Object.values(cart).map(item => `${item.quantity} x ${item.name}`).join(', '),
+                timestamp: new Date().toISOString()
+            };
+            
+            const stockUpdates = Object.keys(cart).map(id => {
+                const product = products.find(p => p.id === parseInt(id));
+                return {
+                    id: parseInt(id),
+                    newStock: product.stock
+                };
+            });
+            
+            try {
+                // 1. Send the order request
+                const orderResponse = await fetch(GOOGLE_SHEETS_ORDER_API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+
+                // 2. Send the stock update request
+                const stockUpdateResponse = await fetch(GOOGLE_SHEETS_ORDER_API_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sheet: "products",
+                        action: "updateStock",
+                        updates: stockUpdates
+                    })
+                });
+
+                showModal("Bestellung erfolgreich!", "Ihre Bestellung wurde erfolgreich abgeschickt. Der Lagerbestand wird aktualisiert.");
+                
+                cart = {}; // Clear cart
+                renderCart();
+                toggleCart();
+                fetchProducts(); // Update stock view for employee
+            } catch (error) {
+                console.error("Fehler bei der Bestellung:", error);
+                showModal("Bestellung fehlgeschlagen", "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.");
+            } finally {
+                isOrderProcessing = false;
+                flyoutOrderButtonEl.disabled = false;
+                flyoutOrderButtonEl.textContent = 'Bestellung abschicken';
+            }
+        }
+
+        // Event Listeners
+        loginButtonEl.addEventListener('click', handleLogin);
+        logoutButtonEl.addEventListener('click', handleLogout);
+        ordersButtonEl.addEventListener('click', showOrdersView);
+        dashboardButtonEl.addEventListener('click', showAdminDashboard);
+        backToShopButtonEl.addEventListener('click', showShopView);
+        flyoutOrderButtonEl.addEventListener('click', submitOrder);
+        cartIconButtonEl.addEventListener('click', toggleCart);
+
+        productSearchEl.addEventListener('input', () => {
+            const selectedCategory = document.querySelector('.category-btn.bg-indigo-600').dataset.category;
+            handleSearchAndCategory(selectedCategory);
+        });
+
+        categoryButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const selectedCategory = e.target.dataset.category;
+                categoryButtons.forEach(btn => {
+                    btn.classList.remove('bg-indigo-600', 'text-white');
+                    btn.classList.add('bg-gray-200', 'text-gray-800');
+                });
+                e.target.classList.remove('bg-gray-200', 'text-gray-800');
+                e.target.classList.add('bg-indigo-600', 'text-white');
+                handleSearchAndCategory(selectedCategory);
+            });
+        });
+
+        categoryDropdownEl.addEventListener('change', (e) => {
+            const selectedCategory = e.target.value;
+            handleSearchAndCategory(selectedCategory);
+        });
+    </script>
+</body>
+</html>
