@@ -101,21 +101,7 @@
                     <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Organisation">Organisation</button>
                     <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Papierware">Papierware</button>
                     <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Reinigung & Hygiene">Reinigung & Hygiene</button>
-                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Ordnen">Ordnen</button>
-                </div>
-            </div>
-
-            <!-- Main Product Content Area -->
-            <div class="flex-grow">
-                <!-- Dropdown for Categories (Mobile) -->
-                <div class="lg:hidden mb-4">
-                    <select id="category-dropdown" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                        <option value="Alle">Alle Kategorien</option>
-                        <option value="Schreibwaren">Schreibwaren</option>
-                        <option value="Organisation">Organisation</option>
-                        <option value="Papierware">Papierware</option>
-                        <option value="Reinigung & Hygiene">Reinigung & Hygiene</option>
-                        <option value="Ordnen">Ordnen</option>
+                    <button class="category-btn bg-gray-200 text-gray-800 font-semibold py-2.5 px-4 rounded-lg hover:bg-gray-300 transition-colors w-full text-left" data-category="Ordnen">Ordnen</option>
                     </select>
                 </div>
                 
@@ -211,9 +197,11 @@
     
     <script>
         // *** WICHTIG: Ersetzen Sie diese URLs durch Ihre eigenen, die Sie aus dem Google Apps Script-Setup erhalten. ***
-        const GOOGLE_SHEETS_PRODUCT_API_URL = "https://script.google.com/macros/s/AKfycbx0RSlQb9yuuTdVtCppjBsdiQaqdd0e21JIsV9s0qJAWT-lxUrhKSbuZ6-A0lxeUCAn/exec?sheet=products";
-        const GOOGLE_SHEETS_ORDER_API_URL = "https://script.google.com/macros/s/AKfycbx0RSlQb9yuuTdVtCppjBsdiQaqdd0e21JIsV9s0qJAWT-lxUrhKSbuZ6-A0lxeUCAn/exec";
-        const GOOGLE_SHEETS_HISTORY_API_URL = "https://script.google.com/macros/s/AKfycbx0RSlQb9yuuTdVtCppjBsdiQaqdd0e21JIsV9s0qJAWT-lxUrhKSbuZ6-A0lxeUCAn/exec?sheet=orders";
+        // NEUE URL HIER EINGEFÜGT:
+        const BASE_API_URL = "https://script.google.com/macros/s/AKfycbypAxTB0SIoKh4prES0-Q2-Ci1nEyioomJdKHectX-N_XRTfrn-_Uy_xH9ug4VY0CQl/exec";
+        const GOOGLE_SHEETS_PRODUCT_API_URL = BASE_API_URL + "?sheet=products";
+        const GOOGLE_SHEETS_ORDER_API_URL = BASE_API_URL; // POST requests go to the base URL
+        const GOOGLE_SHEETS_HISTORY_API_URL = BASE_API_URL + "?sheet=orders";
         
         // Liste der Benutzer und ihrer Rollen.
         // Fügen Sie hier weitere Benutzer hinzu oder entfernen Sie sie.
