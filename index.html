@@ -211,9 +211,9 @@
     
     <script>
         // *** WICHTIG: Ersetzen Sie diese URLs durch Ihre eigenen, die Sie aus dem Google Apps Script-Setup erhalten. ***
-        const GOOGLE_SHEETS_PRODUCT_API_URL = "https://script.google.com/macros/s/AKfycbyhs_HkfM3HwHOU2cBCfJJqzSWCPcJXfQn6pFKd_xoS17hklvdCi1RDtg4sUrW8Y6PY/exec?sheet=products";
-        const GOOGLE_SHEETS_ORDER_API_URL = "https://script.google.com/macros/s/AKfycbyhs_HkfM3HwHOU2cBCfJJqzSWCPcJXfQn6pFKd_xoS17hklvdCi1RDtg4sUrW8Y6PY/exec";
-        const GOOGLE_SHEETS_HISTORY_API_URL = "https://script.google.com/macros/s/AKfycbyhs_HkfM3HwHOU2cBCfJJqzSWCPcJXfQn6pFKd_xoS17hklvdCi1RDtg4sUrW8Y6PY/exec?sheet=orders";
+        const GOOGLE_SHEETS_PRODUCT_API_URL = "https://script.google.com/macros/s/AKfycbzyKX6mxEy_Dq5OaiFrw4Jqjx1u7ai-94cJ-SaUui-3ojCFInO1mLU-4oknh1MGFtOG/exec?sheet=products";
+        const GOOGLE_SHEETS_ORDER_API_URL = "https://script.google.com/macros/s/AKfycbzyKX6mxEy_Dq5OaiFrw4Jqjx1u7ai-94cJ-SaUui-3ojCFInO1mLU-4oknh1MGFtOG/exec";
+        const GOOGLE_SHEETS_HISTORY_API_URL = "https://script.google.com/macros/s/AKfycbzyKX6mxEy_Dq5OaiFrw4Jqjx1u7ai-94cJ-SaUui-3ojCFInO1mLU-4oknh1MGFtOG/exec?sheet=orders";
         
         // Liste der Benutzer und ihrer Rollen.
         // Fügen Sie hier weitere Benutzer hinzu oder entfernen Sie sie.
@@ -501,8 +501,6 @@
             try {
                 const response = await fetch(GOOGLE_SHEETS_ORDER_API_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
-                    cache: 'no-cache',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sheet: "products",
@@ -511,8 +509,15 @@
                     })
                 });
 
-                // Request assumed to be successful due to 'no-cors'
-                showModal("Bestand aktualisiert", `Der Bestand wurde erfolgreich auf ${newStock} aktualisiert.`);
+                if (!response.ok) {
+                    throw new Error('Netzwerkantwort war nicht OK');
+                }
+                const result = await response.json();
+                if (result.success) {
+                    showModal("Bestand aktualisiert", `Der Bestand wurde erfolgreich auf ${newStock} aktualisiert.`);
+                } else {
+                    showModal("Aktualisierung fehlgeschlagen", result.error || "Ein unbekannter Fehler ist aufgetreten.");
+                }
             } catch (error) {
                 console.error("Fehler bei der Bestandsaktualisierung:", error);
                 showModal("Aktualisierung fehlgeschlagen", "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.");
@@ -724,17 +729,17 @@
                 // 1. Send the order request
                 const orderResponse = await fetch(GOOGLE_SHEETS_ORDER_API_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
-                    cache: 'no-cache',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(orderData)
                 });
 
+                if (!orderResponse.ok) {
+                    throw new Error('Bestellung konnte nicht gesendet werden.');
+                }
+
                 // 2. Send the stock update request
                 const stockUpdateResponse = await fetch(GOOGLE_SHEETS_ORDER_API_URL, {
                     method: 'POST',
-                    mode: 'no-cors',
-                    cache: 'no-cache',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         sheet: "products",
@@ -742,6 +747,10 @@
                         updates: stockUpdates
                     })
                 });
+
+                if (!stockUpdateResponse.ok) {
+                    throw new Error('Lagerbestand konnte nicht aktualisiert werden.');
+                }
 
                 showModal("Bestellung erfolgreich!", "Ihre Bestellung wurde erfolgreich abgeschickt. Der Lagerbestand wird aktualisiert.");
                 
@@ -751,7 +760,7 @@
                 fetchProducts(); // Update stock view for employee
             } catch (error) {
                 console.error("Fehler bei der Bestellung:", error);
-                showModal("Bestellung fehlgeschlagen", "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.");
+                showModal("Bestellung fehlgeschlagen", "Ein Fehler ist aufgetreten: " + error.message);
             } finally {
                 isOrderProcessing = false;
                 flyoutOrderButtonEl.disabled = false;
