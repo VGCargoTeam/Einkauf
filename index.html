@@ -198,7 +198,7 @@
     <script>
         // *** WICHTIG: Ersetzen Sie diese URLs durch Ihre eigenen, die Sie aus dem Google Apps Script-Setup erhalten. ***
         // NEUE URL HIER EINGEFÜGT:
-        const BASE_API_URL = "https://script.google.com/macros/s/AKfycbypAxTB0SIoKh4prES0-Q2-Ci1nEyioomJdKHectX-N_XRTfrn-_Uy_xH9ug4VY0CQl/exec";
+        const BASE_API_URL = "https://script.google.com/macros/s/AKfycbwd32ZSvTtQWHWVMRN1KI10Gqhs19wOKxtaCj1xH5d3bGE_4iW7F1J7OBnc2obljl_N/exec";
         const GOOGLE_SHEETS_PRODUCT_API_URL = BASE_API_URL + "?sheet=products";
         const GOOGLE_SHEETS_ORDER_API_URL = BASE_API_URL; // POST requests go to the base URL
         const GOOGLE_SHEETS_HISTORY_API_URL = BASE_API_URL + "?sheet=orders";
@@ -207,27 +207,27 @@
         // Fügen Sie hier weitere Benutzer hinzu oder entfernen Sie sie.
         // Für eine professionelle Lösung sollte dies in einem sicheren Backend gespeichert werden (z.B. Firebase).
         const users = {
-            "Andreas Klassen": { password: "admin123", role: "admin" },
-            "Michael House": { password: "123", role: "employee" },
-            "Slawa Malik": { password: "123", role: "employee" },
-            "Heinrich Neufeld": { password: "123", role: "employee" },
-            "Benjamin Pankratz": { password: "123", role: "employee" },
-            "Erik Latinzew": { password: "123", role: "employee" },
-            "Marcel Fritsche": { password: "123", role: "employee" },
-            "Joanna Fritsche": { password: "123", role: "employee" },
-            "Waldemar Traudt": { password: "123", role: "employee" },
-            "Valentina Lang": { password: "123", role: "employee" },
-            "Eugen Beljakov": { password: "123", role: "employee" },
-            "Mike Becker": { password: "123", role: "employee" },
-            "Steffi Klassen": { password: "123", role: "employee" },
-            "Dennis Stscherbakow": { password: "123", role: "employee" },
-            "Sylvia Stöffen": { password: "123", role: "employee" },
-            "Silke Theiss": { password: "123", role: "employee" },
-            "Andrej Swetlitschnij": { password: "123", role: "employee" },
-            "Ines Kostük": { password: "123", role: "employee" },
-            "Magdalena Janusz": { password: "123", role: "employee" },
-            "Inge Huhn": { password: "123", role: "employee" },
-            "Kevin Kirst": { password: "123", role: "employee" }
+            "Andreas": { password: "admin123", role: "admin" },
+            "Michael": { password: "123", role: "employee" },
+            "Slawa": { password: "123", role: "employee" },
+            "Heinrich": { password: "123", role: "employee" },
+            "Benjamin": { password: "123", role: "employee" },
+            "Erik": { password: "123", role: "employee" },
+            "Marcel": { password: "123", role: "employee" },
+            "Joanna": { password: "123", role: "employee" },
+            "Waldemar": { password: "123", role: "employee" },
+            "Valentina": { password: "123", role: "employee" },
+            "Eugen": { password: "123", role: "employee" },
+            "Mike": { password: "123", role: "employee" },
+            "Steffi": { password: "123", role: "employee" },
+            "Dennis": { password: "123", role: "employee" },
+            "Sylvia": { password: "123", role: "employee" },
+            "Silke": { password: "123", role: "employee" },
+            "Andrej": { password: "123", role: "employee" },
+            "Ines": { password: "123", role: "employee" },
+            "Magdalena": { password: "123", role: "employee" },
+            "Inge": { password: "123", role: "employee" },
+            "Kevin": { password: "123", role: "employee" }
         };
 
         // Konfigurierbarer Schwellenwert für niedrigen Bestand
