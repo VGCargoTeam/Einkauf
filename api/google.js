@@ -1,45 +1,66 @@
 // /api/google.js
-// Universeller Proxy für Google Apps Script
-// Verhindert CORS-Fehler, indem Anfragen serverseitig weitergeleitet werden.
+// Universeller Proxy zwischen deinem Frontend (Vercel) und Google Apps Script
+// Verhindert CORS-Probleme und erzwingt JSON-Antworten
+
+export const config = {
+  api: {
+    bodyParser: false, // Verhindert automatisches Parsen, damit wir GET/POST sauber behandeln können
+  },
+};
 
 export default async function handler(req, res) {
-  // URL deines Google Apps Script Web-Apps:
-  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx0-S0zIf0i5f2gwufjgUanqGTdDDWdRKjnZVEx1EGYyL1Fylpv90sEiE5zu-39RoPU/exec";
+  const GOOGLE_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbx0-S0zIf0i5f2gwufjgUanqGTdDDWdRKjnZVEx1EGYyL1Fylpv90sEiE5zu-39RoPU/exec";
 
-  // Erlaube alle Domains (du kannst das später auf deine Domain einschränken)
+  // ✅ CORS erlauben
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // OPTIONS-Anfragen (CORS Preflight) direkt beantworten
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
   try {
-    // Query-Parameter weitergeben (z. B. ?sheet=products)
-    const queryString = req.url.split("?")[1] || "";
+    // Querystring übernehmen (z. B. ?sheet=products)
+    const query = req.url.split("?")[1] || "";
+    const url = `${GOOGLE_SCRIPT_URL}${query ? "?" + query : ""}`;
 
-    // Anfrage an Google Script weiterleiten
-    const response = await fetch(
-      `${GOOGLE_SCRIPT_URL}${queryString ? "?" + queryString : ""}`,
-      {
-        method: req.method,
-        headers: { "Content-Type": "application/json" },
-        body: req.method === "POST" ? JSON.stringify(req.body) : undefined,
+    // Body aus Request lesen (wenn POST)
+    let body = null;
+    if (req.method === "POST") {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
       }
-    );
+      body = Buffer.concat(chunks).toString();
+    }
 
-    // Antwort lesen (Text oder JSON)
+    // Anfrage an Google weiterleiten
+    const response = await fetch(url, {
+      method: req.method,
+      headers: { "Content-Type": "application/json" },
+      body: req.method === "POST" ? body : undefined,
+    });
+
     const text = await response.text();
 
-    // JSON-Antwort durchreichen
-    res.status(200).send(text);
-  } catch (error) {
-    console.error("Proxy-Fehler:", error);
+    // Wenn Google HTML statt JSON liefert → Fehler behandeln
+    if (text.startsWith("<!DOCTYPE")) {
+      return res.status(502).json({
+        success: false,
+        error: "Google Script lieferte HTML statt JSON. Prüfe die Script-URL.",
+        htmlSnippet: text.slice(0, 200) + "...",
+      });
+    }
+
+    // Antwort unverändert weitergeben
+    res.status(response.status).send(text);
+  } catch (err) {
+    console.error("Proxy-Fehler:", err);
     res.status(500).json({
       success: false,
-      error: "Fehler beim Verbinden mit Google Apps Script: " + error.message,
+      error: "Proxy-Fehler: " + err.message,
     });
   }
 }
